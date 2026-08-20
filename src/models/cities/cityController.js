@@ -4,31 +4,35 @@ exports.searchCities = async (req, res) => {
   try {
     const search = req.query.search?.trim();
 
-    if (!search) {
-      return res.json([]);
-    }
-
-    const [cities] = await db.query(
-      `
+    let query = `
       SELECT
         id,
         city_name,
         state
       FROM cities
-      WHERE city_name LIKE ?
-      AND is_active = 1
+      WHERE 1 = 1
+    `;
+
+    const params = [];
+
+    if (search) {
+      query += ` AND LOWER(city_name) LIKE LOWER(?)`;
+params.push(`${search}%`);
+    }
+
+    query += `
       ORDER BY city_name
       LIMIT 10
-      `,
-      [`${search}%`]
-    );
+    `;
 
-    res.status(200).json(cities);
+    const [cities] = await db.query(query, params);
+
+    return res.status(200).json(cities);
   } catch (err) {
-    console.log(err);
+    console.error("SQL Error:", err);
 
-    res.status(500).json({
-      message: "Server Error",
+    return res.status(500).json({
+      message: err.message,
     });
   }
 };
