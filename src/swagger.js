@@ -1,4 +1,5 @@
 const swaggerJsDoc = require("swagger-jsdoc");
+const path = require("path");
 
 const options = {
   definition: {
@@ -8,16 +9,20 @@ const options = {
       version: "1.0.0",
       description: "API Documentation for Shippers",
     },
-servers: [
-  {
-    url:
-      process.env.RENDER_EXTERNAL_URL ||
-      "http://localhost:8000",
-  },
-],
+    servers: [
+      {
+        url:
+          process.env.RENDER_EXTERNAL_URL ||
+          "https://shippers-backend-slmv.onrender.com",
+      },
+    ],
   },
 
-apis: ["./models/**/*.js"],
+  apis: [path.resolve(__dirname, "models/**/*.js")],
 };
 
-module.exports = swaggerJsDoc(options);
+const swaggerSpec = swaggerJsDoc(options);
+
+console.log("Swagger Paths:", swaggerSpec.paths);
+
+module.exports = swaggerSpec;
