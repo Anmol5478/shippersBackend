@@ -7,11 +7,18 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASSWORD,
   },
 });
+transporter.verify((error) => {
+  if (error) {
+    console.error("❌ Gmail SMTP Error:", error);
+  } else {
+    console.log("✅ Gmail SMTP is ready");
+  }
+});
 
 const sendOTP = async (email, otp) => {
   try {
     const response = await transporter.sendMail({
-      from: `"Ridzey" <${process.env.EMAIL_USER}>`,
+      from: `"Ridezey" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Reset Password OTP",
 
