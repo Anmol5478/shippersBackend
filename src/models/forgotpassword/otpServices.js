@@ -208,6 +208,9 @@
 // };
 
 const nodemailer = require("nodemailer");
+const dns = require("dns");
+
+dns.setDefaultResultOrder("ipv4first");
 
 console.log("📧 EMAIL_USER:", process.env.EMAIL_USER);
 console.log(
@@ -217,12 +220,18 @@ console.log(
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  port: 587,
+  secure: false,
+  requireTLS: true,
+
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
+
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 20000,
 });
 
 console.log("📨 Verifying Gmail SMTP...");
@@ -261,4 +270,3 @@ transporter
 module.exports = {
     sendOTP,
     };
-    
