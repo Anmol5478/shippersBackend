@@ -208,69 +208,39 @@
 // };
 
 const nodemailer = require("nodemailer");
-const dns = require("dns").promises;
 
-let transporter;
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
 
-const createTransporter = async () => {
-  try {
-    // Explicitly get IPv4 addresses
-    const addresses = await dns.resolve4("smtp.gmail.com");
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
+  },
 
-    console.log("🌐 Gmail IPv4 addresses:", addresses);
+  pool: true,
+  maxConnections: 1,
+  maxMessages: 100,
 
-    if (!addresses || addresses.length === 0) {
-      throw new Error("Could not resolve Gmail IPv4 address");
-    }
-
-    transporter = nodemailer.createTransport({
-      host: addresses[0],
-      port: 587,
-      secure: false,
-
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-
-      tls: {
-        servername: "smtp.gmail.com",
-      },
-
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 30000,
-    });
-
-    console.log("📨 Verifying Gmail SMTP...");
-
-    await transporter.verify();
-
-    console.log("✅ Gmail SMTP is ready to send emails");
-
-    return transporter;
-  } catch (error) {
-    console.error("❌ Gmail SMTP VERIFY ERROR:", error);
-    throw error;
-  }
-};
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
+});
 const sendOTP = async (email, otp) => {
   try {
-    if (!transporter) {
-      await createTransporter();
-    }
-
-    console.log("📧 sendOTP function called");
-    console.log("📨 Sending OTP to:", email);
+    console.log("📧 Sending OTP to:", email);
 
     const response = await transporter.sendMail({
-      from: `"Ridzey" <${process.env.EMAIL_USER}>`,
+      from: `"Ridezey" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Reset Password OTP",
 
       html: `
-        <h1>Your OTP is: ${otp}</h1>
-        <p>This OTP will expire in 10 minutes.</p>
+        <h2>Password Reset</h2>
+        <p>Your OTP is:</p>
+        <h1>${otp}</h1>
+        <p>This OTP is valid for 10 minutes.</p>
       `,
     });
 
@@ -279,9 +249,9 @@ const sendOTP = async (email, otp) => {
     return response;
   } catch (error) {
     console.error("❌ GMAIL SEND ERROR:", error);
-    throw new Error(error.message);
+
+    throw new Error("Failed to send OTP email");
   }
 };
-module.exports = {
-  sendOTP,
-};
+
+module.exports = { sendOTP };
