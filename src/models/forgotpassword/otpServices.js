@@ -208,45 +208,58 @@
 // };
 
 const nodemailer = require("nodemailer");
-const dns = require("dns");
+const dns = require("dns").promises;
 
-dns.setDefaultResultOrder("ipv4first");
+let transporter;
 
-console.log("📧 EMAIL_USER:", process.env.EMAIL_USER);
-console.log(
-  "🔑 EMAIL_PASSWORD exists:",
-  Boolean(process.env.EMAIL_PASSWORD)
-);
-
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  requireTLS: true,
-
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-  socketTimeout: 20000,
-});
-
-console.log("📨 Verifying Gmail SMTP...");
-
-transporter
-  .verify()
-  .then(() => {
-    console.log("✅ Gmail SMTP is ready to send emails");
-  })
-  .catch((error) => {
-    console.error("❌ Gmail SMTP VERIFY ERROR:", error);
-  });
-
-  const sendOTP = async (email, otp) => {
+const createTransporter = async () => {
   try {
+    // Explicitly get IPv4 addresses
+    const addresses = await dns.resolve4("smtp.gmail.com");
+
+    console.log("🌐 Gmail IPv4 addresses:", addresses);
+
+    if (!addresses || addresses.length === 0) {
+      throw new Error("Could not resolve Gmail IPv4 address");
+    }
+
+    transporter = nodemailer.createTransport({
+      host: addresses[0],
+      port: 587,
+      secure: false,
+
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD,
+      },
+
+      tls: {
+        servername: "smtp.gmail.com",
+      },
+
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 30000,
+    });
+
+    console.log("📨 Verifying Gmail SMTP...");
+
+    await transporter.verify();
+
+    console.log("✅ Gmail SMTP is ready to send emails");
+
+    return transporter;
+  } catch (error) {
+    console.error("❌ Gmail SMTP VERIFY ERROR:", error);
+    throw error;
+  }
+};
+const sendOTP = async (email, otp) => {
+  try {
+    if (!transporter) {
+      await createTransporter();
+    }
+
     console.log("📧 sendOTP function called");
     console.log("📨 Sending OTP to:", email);
 
@@ -254,19 +267,21 @@ transporter
       from: `"Ridzey" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Reset Password OTP",
-      html: `<h1>Your OTP is: ${otp}</h1>`,
+
+      html: `
+        <h1>Your OTP is: ${otp}</h1>
+        <p>This OTP will expire in 10 minutes.</p>
+      `,
     });
 
-    console.log("✅ OTP email sent successfully");
-    console.log("Message ID:", response.messageId);
+    console.log("✅ OTP email sent:", response.messageId);
 
     return response;
   } catch (error) {
     console.error("❌ GMAIL SEND ERROR:", error);
-
     throw new Error(error.message);
   }
 };
 module.exports = {
-    sendOTP,
-    };
+  sendOTP,
+};
