@@ -40,6 +40,6 @@ module.exports = {
 
     saveOTP,
     getOTP,
-    deleteOTP
+
 
 };
