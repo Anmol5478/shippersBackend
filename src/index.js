@@ -38,7 +38,7 @@ app.get("/", async (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
 app.use(
-  "/api-docs",
+  "/swagger",
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec)
 );
