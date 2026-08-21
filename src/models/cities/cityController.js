@@ -22,7 +22,6 @@ params.push(`${search}%`);
 
     query += `
       ORDER BY city_name
-      LIMIT 10
     `;
 
     const [cities] = await db.query(query, params);
