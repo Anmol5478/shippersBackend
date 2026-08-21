@@ -5,7 +5,7 @@ const saveOTP = async (email, otp, expiry) => {
 
     await db.query(
         `
-        INSERT INTO password_reset_otps
+        INSERT INTO otp
         (email,otp,expires_at)
         VALUES(?,?,?)
         `,
@@ -19,7 +19,7 @@ const getOTP = async (email) => {
     const [rows] = await db.query(
         `
         SELECT *
-        FROM password_reset_otps
+        FROM otp
         WHERE email=?
         `,
         [email]
