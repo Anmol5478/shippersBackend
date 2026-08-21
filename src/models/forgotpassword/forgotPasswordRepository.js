@@ -1,0 +1,56 @@
+const db = require("../../config/db");
+
+const saveOTP = async (email, otp, expiry) => {
+
+    await db.query(
+        `
+        DELETE FROM password_reset_otps
+        WHERE email=?
+        `,
+        [email]
+    );
+
+    await db.query(
+        `
+        INSERT INTO password_reset_otps
+        (email,otp,expires_at)
+        VALUES(?,?,?)
+        `,
+        [email, otp, expiry]
+    );
+
+};
+
+const getOTP = async (email) => {
+
+    const [rows] = await db.query(
+        `
+        SELECT *
+        FROM password_reset_otps
+        WHERE email=?
+        `,
+        [email]
+    );
+
+    return rows[0];
+};
+
+const deleteOTP = async (email) => {
+
+    await db.query(
+        `
+        DELETE FROM password_reset_otps
+        WHERE email=?
+        `,
+        [email]
+    );
+
+};
+
+module.exports = {
+
+    saveOTP,
+    getOTP,
+    deleteOTP
+
+};

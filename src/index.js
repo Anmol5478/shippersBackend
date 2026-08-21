@@ -13,6 +13,8 @@ app.use(express.json());
 
 const authRoutes = require("./models/auth/authRoutes");
 const cityRoutes = require("./models/cities/cityRoutes");
+const forgotPasswordRoutes = require("./models/forgotpassword/forgotPasswordRoutes");
+
 const PORT= process.env.PORT || 8000;
 
 
@@ -22,7 +24,7 @@ app.get("/", async (req, res) => {
     const [rows] = await db.query(
       "SELECT DATABASE() AS databaseName"
     );
-
+    
     res.json({
       success: true,
       database: rows[0].databaseName,
@@ -37,6 +39,7 @@ app.get("/", async (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
+app.use("/api/auth", forgotPasswordRoutes);
 app.use(
   "/swagger",
   swaggerUi.serve,

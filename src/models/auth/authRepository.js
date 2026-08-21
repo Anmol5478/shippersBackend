@@ -47,10 +47,32 @@ VALUES (?,?,?,?,?,?)`,
 
   return result.insertId;
 };
+const updatePassword = async (
+    email,
+    password
+) => {
+
+    await db.query(
+
+        `
+        UPDATE users
+        SET password=?
+        WHERE email=?
+        `,
+
+        [
+            password,
+            email
+        ]
+
+    );
+
+};
 
 module.exports = {
   findUserByEmail,
   findUserByPhone,
   createUser,
+  updatePassword,
   findUser
 };
