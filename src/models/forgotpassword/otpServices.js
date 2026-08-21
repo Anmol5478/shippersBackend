@@ -1,17 +1,27 @@
 const nodemailer = require("nodemailer");
 
+
+console.log("EMAIL_USER:", process.env.EMAIL_USER);
+console.log(
+  "EMAIL_PASSWORD exists:",
+  !!process.env.EMAIL_PASSWORD
+);
+
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
 });
-transporter.verify((error) => {
+
+transporter.verify((error, success) => {
   if (error) {
-    console.error("❌ Gmail SMTP Error:", error);
+    console.error("❌ GMAIL SMTP VERIFY ERROR:", error);
   } else {
-    console.log("✅ Gmail SMTP is ready");
+    console.log("✅ Gmail SMTP is ready:", success);
   }
 });
 
