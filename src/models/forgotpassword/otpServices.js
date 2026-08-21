@@ -1,12 +1,6 @@
 const nodemailer = require("nodemailer");
 
 
-console.log("EMAIL_USER:", process.env.EMAIL_USER);
-console.log(
-  "EMAIL_PASSWORD exists:",
-  !!process.env.EMAIL_PASSWORD
-);
-
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 465,
@@ -17,13 +11,14 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ GMAIL SMTP VERIFY ERROR:", error);
-  } else {
-    console.log("✅ Gmail SMTP is ready:", success);
-  }
-});
+transporter.verify()
+  .then(() => {
+    console.log("✅ Gmail SMTP is ready to send emails");
+  })
+  .catch((error) => {
+    console.error("❌ Gmail SMTP VERIFY ERROR:");
+    console.error(error);
+  });
 
 const sendOTP = async (email, otp) => {
   try {
