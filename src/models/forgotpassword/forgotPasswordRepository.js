@@ -2,13 +2,6 @@ const db = require("../../config/db");
 
 const saveOTP = async (email, otp, expiry) => {
 
-    await db.query(
-        `
-        DELETE FROM password_reset_otps
-        WHERE email=?
-        `,
-        [email]
-    );
 
     await db.query(
         `
