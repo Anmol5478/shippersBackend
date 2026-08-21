@@ -82,9 +82,6 @@ const resetPassword = async (
     hashedPassword
   );
 
-  await forgotPasswordRepository.deleteOTP(
-    email
-  );
 
   return true;
 };

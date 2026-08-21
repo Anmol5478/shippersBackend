@@ -22,6 +22,10 @@ params.push(`${search}%`);
 
     query += `
       ORDER BY city_name
+<<<<<<< HEAD
+=======
+      LIMIT 20
+>>>>>>> e528562 (delete otp removed)
     `;
 
     const [cities] = await db.query(query, params);

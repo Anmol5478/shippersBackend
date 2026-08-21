@@ -35,17 +35,6 @@ const getOTP = async (email) => {
     return rows[0];
 };
 
-const deleteOTP = async (email) => {
-
-    await db.query(
-        `
-        DELETE FROM password_reset_otps
-        WHERE email=?
-        `,
-        [email]
-    );
-
-};
 
 module.exports = {
 
