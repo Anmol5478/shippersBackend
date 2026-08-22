@@ -48,6 +48,11 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec)
 );
+app.get("/ping-server-9x7k", (req, res) => {
+  res.status(200).json({
+    success: true,
+  });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
