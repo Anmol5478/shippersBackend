@@ -8,7 +8,7 @@ const sendOTP = async (email, otp) => {
       BREVO_API_URL,
       {
         sender: {
-          name: "Ridezey",
+          name: "Your Company",
           email: process.env.BREVO_SENDER_EMAIL, // must be a verified sender in Brevo
         },
         to: [{ email }],
@@ -22,166 +22,112 @@ const sendOTP = async (email, otp) => {
 <title>Password Reset</title>
 </head>
 
-<body style="margin:0;padding:40px 15px;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;">
+<body style="margin:0;padding:40px 16px;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;">
 
-<table width="100%" cellpadding="0" cellspacing="0">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
 <td align="center">
 
-<table width="600" cellpadding="0" cellspacing="0"
+<table role="presentation" width="440" cellpadding="0" cellspacing="0" border="0"
 style="
-max-width:600px;
+max-width:440px;
 background:#ffffff;
-border-radius:20px;
+border-radius:14px;
 overflow:hidden;
-box-shadow:0 15px 40px rgba(8,27,58,0.12);
+border:1px solid #eceef4;
 ">
 
   <!-- Header -->
   <tr>
-    <td
-      align="center"
-      style="
-      background:#081B3A;
-      padding:45px 30px;
-      ">
-      
-      <div
+    <td align="center" style="padding:28px 30px 20px;">
+      <span
         style="
-        width:75px;
-        height:75px;
-        background:#FDBE15;
-        border-radius:50%;
-        line-height:75px;
-        font-size:36px;
-        margin:auto;
+        color:#081B3A;
+        font-size:14px;
+        font-weight:700;
+        letter-spacing:1.5px;
         ">
-        🔐
-      </div>
-
-      <h1
-        style="
-        margin:25px 0 10px;
-        color:#ffffff;
-        font-size:30px;
-        font-weight:bold;
-        ">
-        Password Reset
-      </h1>
-
-      <p
-        style="
-        margin:0;
-        color:#d7deea;
-        font-size:16px;
-        ">
-        Verify your identity to continue
-      </p>
-
+        RIDEZEY
+      </span>
     </td>
   </tr>
 
   <!-- Content -->
   <tr>
-    <td style="padding:45px 40px;">
-
-      <h2
-        style="
-        margin:0;
-        color:#081B3A;
-        font-size:24px;
-        ">
-        Hello,
-      </h2>
+    <td style="padding:8px 36px 32px;">
 
       <p
         style="
-        margin:20px 0;
-        color:#555;
-        font-size:16px;
-        line-height:28px;
+        margin:0 0 6px;
+        color:#081B3A;
+        font-size:17px;
+        font-weight:600;
+        text-align:center;
         ">
-        We received a request to reset your password. Use the verification code below to continue.
+        Reset your password
+      </p>
+
+      <p
+        style="
+        margin:0 0 26px;
+        color:#7a8296;
+        font-size:14px;
+        line-height:21px;
+        text-align:center;
+        ">
+        Use this code to continue. It's valid for 10 minutes.
       </p>
 
       <!-- OTP -->
-      <table width="100%">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
           <td align="center">
-
-            <div
-              style="
-              display:inline-block;
-              background:#081B3A;
-              color:#FDBE15;
-              font-size:38px;
-              font-weight:bold;
-              letter-spacing:12px;
-              padding:18px 42px;
-              border-radius:14px;
-              border:3px solid #FDBE15;
-              ">
-              ${otp}
-            </div>
-
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td
+                  style="
+                  background:#FFF9EC;
+                  border-radius:10px;
+                  padding:16px 34px;
+                  ">
+                  <span
+                    style="
+                    color:#081B3A;
+                    font-size:28px;
+                    font-weight:700;
+                    letter-spacing:8px;
+                    font-family:'Courier New',monospace;
+                    ">${otp}</span>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
       </table>
 
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;">
+        <tr><td style="border-top:1px solid #f0f1f6;"></td></tr>
+      </table>
+
       <p
         style="
-        margin:30px 0 0;
+        margin:20px 0 0;
+        color:#9aa1b2;
+        font-size:12.5px;
+        line-height:19px;
         text-align:center;
-        color:#666;
-        font-size:15px;
         ">
-        This OTP is valid for
-        <strong style="color:#081B3A;">10 minutes</strong>.
-      </p>
-
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:35px;">
-        <tr>
-          <td
-            style="
-            background:#FFF8E5;
-            border-left:5px solid #FDBE15;
-            padding:18px;
-            border-radius:8px;
-            color:#555;
-            font-size:15px;
-            line-height:24px;
-            ">
-            <strong style="color:#081B3A;">Didn't request this?</strong><br>
-            If you didn't request a password reset, you can safely ignore this email. Your account remains secure.
-          </td>
-        </tr>
-      </table>
-
-    </td>
-  </tr>
-
-  <!-- Footer -->
-  <tr>
-    <td
-      align="center"
-      style="
-      background:#081B3A;
-      padding:25px;
-      ">
-
-      <p
-        style="
-        margin:0;
-        color:#b8c3d8;
-        font-size:13px;
-        ">
-        © ${new Date().getFullYear()} Your Company. All Rights Reserved.
+        Didn't request this? You can safely ignore this email.
       </p>
 
     </td>
   </tr>
 
 </table>
+
+<p style="margin:20px 0 0;color:#aeb4c2;font-size:11.5px;text-align:center;">
+  © ${new Date().getFullYear()} Ridezey
+</p>
 
 </td>
 </tr>
