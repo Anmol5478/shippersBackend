@@ -1,11 +1,15 @@
 const db = require("../../config/db");
 
-const saveOTP = async (email, otp, expiry) => {
+const saveResetToken = async (
+  email,
+  token,
+  expiry
+) => {
   await db.query(
     `
     INSERT INTO otp (
       email,
-      otp,
+      token,
       expires_at,
       is_used,
       created_at
@@ -13,34 +17,43 @@ const saveOTP = async (email, otp, expiry) => {
     VALUES (?, ?, ?, FALSE, NOW())
 
     ON DUPLICATE KEY UPDATE
-      otp = VALUES(otp),
+      token = VALUES(token),
       expires_at = VALUES(expires_at),
       is_used = FALSE,
       created_at = NOW()
     `,
-    [email, otp, expiry]
+    [email, token, expiry]
   );
 };
 
-const getOTP = async (email) => {
+const getResetToken = async (token) => {
+  const [rows] = await db.query(
+    `
+    SELECT *
+    FROM otp
+    WHERE token = ?
+      AND is_used = FALSE
+      AND expires_at > NOW()
+    `,
+    [token]
+  );
 
-    const [rows] = await db.query(
-        `
-        SELECT *
-        FROM otp
-        WHERE email=?
-        `,
-        [email]
-    );
-
-    return rows[0];
+  return rows[0];
 };
 
+const markTokenAsUsed = async (id) => {
+  await db.query(
+    `
+    UPDATE otp
+    SET is_used = TRUE
+    WHERE id = ?
+    `,
+    [id]
+  );
+};
 
 module.exports = {
-
-    saveOTP,
-    getOTP,
-
-
+  saveResetToken,
+  getResetToken,
+  markTokenAsUsed,
 };

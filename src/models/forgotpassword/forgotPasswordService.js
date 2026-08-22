@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const authRepository = require("../auth/authRepository");
 const forgotPasswordRepository = require("./forgotPasswordRepository");
@@ -15,78 +16,139 @@ const forgotPassword = async (email) => {
     throw new Error("Email not registered");
   }
 
-  const otp = Math.floor(
-    100000 + Math.random() * 900000
-  ).toString();
+  /*
+   * Generate a secure random token.
+   *
+   * This original token goes into the reset link.
+   */
+  const resetToken = crypto
+    .randomBytes(32)
+    .toString("hex");
 
+  /*
+   * Hash the token before storing it in the database.
+   *
+   * The actual reset token is never stored directly.
+   */
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  /*
+   * Reset link expires in 15 minutes.
+   */
   const expiry = new Date(
-    Date.now() + 10 * 60 * 1000
+    Date.now() + 15 * 60 * 1000
   );
 
- await forgotPasswordRepository.saveOTP(email, otp, expiry);
+  /*
+   * Save the HASHED token in the existing otp table.
+   */
+  await forgotPasswordRepository.saveResetToken(
+    email,
+    hashedToken,
+    expiry
+  );
 
-// fire-and-forget — don't block the response on Gmail's SMTP roundtrip
-otpService.sendOTP(email, otp).catch((err) => {
-  console.error("Failed to send OTP email:", err.message || err);
-});
-};
+  /*
+   * Create the frontend reset password link.
+   *
+   * Example:
+   * http://localhost:5173/reset-password?token=abc123...
+   */
+  const resetLink =
+    `${process.env.FRONTEND_URL}/reset-password?token=${encodeURIComponent(
+      resetToken
+    )}`;
 
-const verifyOTP = async (email, otp) => {
-  if (!email || !otp) {
-    throw new Error("Email and OTP are required");
-  }
-
-  const record =
-    await forgotPasswordRepository.getOTP(email);
-
-  if (!record) {
-    throw new Error("OTP not found");
-  }
-
-  if (record.is_used) {
-    throw new Error("OTP already used");
-  }
-
-  if (record.otp !== otp) {
-    throw new Error("Invalid OTP");
-  }
-
-  if (new Date() > new Date(record.expires_at)) {
-    throw new Error("OTP expired");
-  }
+  /*
+   * Send reset password email.
+   */
+  await otpService.sendPasswordResetLink(
+    email,
+    resetLink
+  );
 
   return true;
 };
 
 const resetPassword = async (
-  email,
-  otp,
+  token,
   newPassword
 ) => {
-  if (!email || !otp || !newPassword) {
+  if (!token || !newPassword) {
     throw new Error(
-      "Email, OTP and New Password are required"
+      "Reset token and new password are required"
     );
   }
 
-  await verifyOTP(email, otp);
+  /*
+   * Password validation:
+   * - Minimum 8 characters
+   * - One uppercase letter
+   * - One lowercase letter
+   * - One number
+   * - One special character
+   */
+  const passwordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
+  if (!passwordRegex.test(newPassword)) {
+    throw new Error(
+      "Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character"
+    );
+  }
+
+  /*
+   * Hash the token received from the reset link.
+   */
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  /*
+   * Find the valid unused token.
+   */
+  const record =
+    await forgotPasswordRepository.getResetToken(
+      hashedToken
+    );
+
+  if (!record) {
+    throw new Error(
+      "This password reset link is invalid or has expired"
+    );
+  }
+
+  /*
+   * Hash the new password.
+   */
   const hashedPassword = await bcrypt.hash(
     newPassword,
     10
   );
 
+  /*
+   * Update the user's password.
+   */
   await authRepository.updatePassword(
-    email,
+    record.email,
     hashedPassword
   );
 
+  /*
+   * Make the reset link single-use.
+   */
+  await forgotPasswordRepository.markTokenAsUsed(
+    record.id
+  );
 
   return true;
 };
 
 module.exports = {
   forgotPassword,
-  verifyOTP,
   resetPassword,
 };
