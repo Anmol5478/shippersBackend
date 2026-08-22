@@ -8,7 +8,7 @@ const sendOTP = async (email, otp) => {
       BREVO_API_URL,
       {
         sender: {
-          name: "Your Company",
+          name: "Ridezey",
           email: process.env.BREVO_SENDER_EMAIL, // must be a verified sender in Brevo
         },
         to: [{ email }],
