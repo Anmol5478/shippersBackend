@@ -1,14 +1,24 @@
-const { Resend } = require("resend");
+const nodemailer = require("nodemailer");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Create transporter once, reuse across calls
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER, // your Gmail address
+    pass: process.env.EMAIL_PASS, // 16-char App Password (not your normal password)
+  },
+  pool: true,
+  maxConnections: 5,
+  maxMessages: 100,
+});
 
 const sendOTP = async (email, otp) => {
   try {
-    const response = await resend.emails.send({
-      from: process.env.EMAIL_FROM,
+    const info = await transporter.sendMail({
+      from: `"Your Company" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Reset Password OTP",
-html: `
+      html: `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -187,9 +197,9 @@ box-shadow:0 15px 40px rgba(8,27,58,0.12);
 `,
     });
 
-    return response;
+    return info;
   } catch (error) {
-    console.error("Resend Email Error:", error);
+    console.error("Gmail SMTP Error:", error.message || error);
     throw new Error("Failed to send OTP email");
   }
 };
