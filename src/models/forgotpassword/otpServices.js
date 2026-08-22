@@ -1,24 +1,19 @@
-const nodemailer = require("nodemailer");
+const axios = require("axios");
 
-// Create transporter once, reuse across calls
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER, // your Gmail address
-    pass: process.env.EMAIL_PASS, // 16-char App Password (not your normal password)
-  },
-  pool: true,
-  maxConnections: 5,
-  maxMessages: 100,
-});
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
 const sendOTP = async (email, otp) => {
   try {
-    const info = await transporter.sendMail({
-      from: `"Ridezey" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "Reset Password OTP",
-      html: `
+    const response = await axios.post(
+      BREVO_API_URL,
+      {
+        sender: {
+          name: "Your Company",
+          email: process.env.BREVO_SENDER_EMAIL, // must be a verified sender in Brevo
+        },
+        to: [{ email }],
+        subject: "Reset Password OTP",
+        htmlContent: `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -195,11 +190,22 @@ box-shadow:0 15px 40px rgba(8,27,58,0.12);
 </body>
 </html>
 `,
-    });
+      },
+      {
+        headers: {
+          "api-key": process.env.BREVO_API_KEY,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+      }
+    );
 
-    return info;
+    return response.data;
   } catch (error) {
-    console.error("Gmail SMTP Error:", error.message || error);
+    console.error(
+      "Brevo Email Error:",
+      error.response?.data || error.message || error
+    );
     throw new Error("Failed to send OTP email");
   }
 };
