@@ -23,13 +23,12 @@ const forgotPassword = async (email) => {
     Date.now() + 10 * 60 * 1000
   );
 
-  await forgotPasswordRepository.saveOTP(
-    email,
-    otp,
-    expiry
-  );
+ await forgotPasswordRepository.saveOTP(email, otp, expiry);
 
-  await otpService.sendOTP(email, otp);
+// fire-and-forget — don't block the response on Gmail's SMTP roundtrip
+otpService.sendOTP(email, otp).catch((err) => {
+  console.error("Failed to send OTP email:", err.message || err);
+});
 };
 
 const verifyOTP = async (email, otp) => {
