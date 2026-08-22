@@ -29,7 +29,10 @@ const findUser = async (loginId) => {
 };
 
 const createUser = async (user) => {
-  const { full_name, email, phone, password, gender,role } = user;
+  const { full_name, email, phone, password,
+     gender
+    
+    ,role } = user;
 
   const [result] = await db.query(
     `INSERT INTO users

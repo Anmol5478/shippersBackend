@@ -8,12 +8,12 @@ const {
   email,
   phone,
   password,
-  gender,
+  gender ,
   role = 2,
 } = payload;
 
   // Validation
-  if (!full_name || !email || !phone || !password || !gender) {
+  if (!full_name || !email || !phone || !password ) {
   throw new Error("All fields are required");
 }
 
@@ -39,7 +39,7 @@ if (existingPhone) {
   email,
   phone,
   password: hashedPassword,
-  gender,
+  gender : gender ?? "",
   role,
 });
   // Generate JWT
@@ -55,7 +55,7 @@ if (existingPhone) {
   full_name,
   email,
   phone,
-  gender,
+  gender : gender ?? "",
   role,
 },
     accessToken,
@@ -96,7 +96,7 @@ const login = async (payload) => {
       full_name: user.full_name,
       email: user.email,
       phone: user.phone,
-      gender: user.gender,
+      gender: user.gender || "",
       role: user.role,
     },
     accessToken,
