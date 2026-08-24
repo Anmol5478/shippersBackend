@@ -18,7 +18,7 @@ const cityRoutes = require("./models/cities/cityRoutes");
 const forgotPasswordRoutes = require(
   "./models/forgotpassword/forgotPasswordRoutes"
 );
-
+const rideRoutes = require("./models/rides/rideRoutes");
 const PORT = process.env.PORT || 8000;
 
 app.get("/", async (req, res) => {
@@ -42,6 +42,8 @@ app.get("/", async (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/auth", forgotPasswordRoutes);
+app.use("/api/rides", rideRoutes);
+
 
 app.use(
   "/swagger",
