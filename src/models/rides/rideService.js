@@ -1,48 +1,29 @@
 const rideRepository = require("./rideRepository");
 
 const searchRides = async (query) => {
-  const {
-    from,
-    to,
-    weight,
-    date,
-  } = query;
+  const { from, to, weight, date } = query;
 
   if (!from || !to) {
-    throw new Error(
-      "From and To locations are required"
-    );
+    throw new Error("From and To locations are required");
   }
 
-  let requiredWeight = null;
-
-  /*
-    Your frontend currently sends:
-
-    weight=1-3
-
-    For searching rides, we need to determine
-    the maximum parcel weight.
-
-    Examples:
-
-    1-3  -> 3
-    3-5  -> 5
-    5-10 -> 10
-  */
+  let minWeight = null;
+  let maxWeight = null;
 
   if (weight) {
     if (weight.includes("-")) {
       const parts = weight.split("-");
 
-      requiredWeight = Number(parts[1]);
-    } else {
-      requiredWeight = Number(weight);
+      minWeight = Number(parts[0]);
+      maxWeight = Number(parts[1]);
+
+    } else if (weight.endsWith("+")) {
+      minWeight = Number(weight.replace("+", ""));
     }
 
     if (
-      Number.isNaN(requiredWeight) ||
-      requiredWeight <= 0
+      Number.isNaN(minWeight) ||
+      minWeight <= 0
     ) {
       throw new Error("Invalid weight");
     }
@@ -51,7 +32,8 @@ const searchRides = async (query) => {
   return await rideRepository.searchRides({
     from: from.trim(),
     to: to.trim(),
-    weight: requiredWeight,
+    minWeight,
+    maxWeight,
     date,
   });
 };
