@@ -119,7 +119,7 @@ const searchRides = async ({
  * Create a new ride
  */
 const createRide = async ({
-  traveller_user_id,
+  user_id,
   pickup_city,
   pickup_state,
   drop_city,
@@ -131,7 +131,7 @@ const createRide = async ({
 }) => {
   const query = `
     INSERT INTO rides (
-      traveller_user_id,
+      user_id,
       pickup_city,
       pickup_state,
       drop_city,
@@ -145,7 +145,7 @@ const createRide = async ({
   `;
 
   const params = [
-    traveller_user_id,
+    user_id,
     pickup_city,
     pickup_state,
     drop_city,
@@ -164,7 +164,7 @@ const createRide = async ({
   return {
     id: result.insertId,
 
-    traveller_user_id,
+    user_id,
 
     pickup_city,
     pickup_state,

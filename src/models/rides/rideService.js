@@ -58,7 +58,7 @@ const searchRides = async (query) => {
  */
 const createRide = async (data) => {
   const {
-    traveller_user_id,
+    user_id,
     pickup_city,
     pickup_state,
     drop_city,
@@ -73,7 +73,7 @@ const createRide = async (data) => {
   // REQUIRED FIELD VALIDATION
   // =========================
 
-  if (!traveller_user_id) {
+  if (!user_id) {
     throw new Error("Traveller user ID is required");
   }
 
@@ -147,7 +147,7 @@ const createRide = async (data) => {
   // =========================
 
   return await rideRepository.createRide({
-    traveller_user_id: traveller_user_id.trim(),
+    user_id: user_id.trim(),
 
     pickup_city: pickup_city.trim(),
 
