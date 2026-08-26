@@ -1,4 +1,5 @@
 const mysql = require("mysql2");
+
 require("dotenv").config();
 
 const db = mysql.createPool({
@@ -7,9 +8,14 @@ const db = mysql.createPool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  ssl: {}, // Required for TiDB Cloud
+
+  ssl: {
+    rejectUnauthorized: false,
+  },
+
   waitForConnections: true,
   connectionLimit: 10,
+  queueLimit: 0,
 });
 
 db.getConnection((err, connection) => {
@@ -18,7 +24,8 @@ db.getConnection((err, connection) => {
     return;
   }
 
-  console.log("✅ Connected to TiDB successfully!");
+  console.log("✅ Connected to Aiven MySQL successfully!");
+
   connection.release();
 });
 
