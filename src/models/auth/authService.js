@@ -9,7 +9,7 @@ const signup = async (payload) => {
     phone,
     password,
     gender,
-    role,
+    role=2,
   } = payload;
 
   if (!full_name || !email || !phone || !password || !role) {

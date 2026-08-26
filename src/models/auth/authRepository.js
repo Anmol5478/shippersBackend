@@ -47,7 +47,7 @@ const generateCustomUserId = async (role) => {
       break;
 
     case 2:
-      prefix = "U";
+      prefix = "USR";
       padding = 4;
       break;
 
