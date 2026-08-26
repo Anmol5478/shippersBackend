@@ -62,10 +62,10 @@ const generateCustomUserId = async (role) => {
 
   const [rows] = await db.query(
     `
-      SELECT user_id
+      SELECT fk_user_id
       FROM users
       WHERE role = ?
-      ORDER BY id DESC
+      ORDER BY fk_user_id DESC
       LIMIT 1
     `,
     [role]
@@ -73,17 +73,17 @@ const generateCustomUserId = async (role) => {
 
   let nextNumber = 1;
 
-  if (rows.length > 0 && rows[0].user_id) {
-    const lastUserId = rows[0].user_id;
-
-    const lastNumber = Number(
-      lastUserId.substring(1)
-    );
-
-    nextNumber = lastNumber + 1;
+  if (rows.length > 0) {
+    nextNumber = Number(rows[0].fk_user_id) + 1;
   }
 
-  return `${prefix}${String(nextNumber).padStart(padding, "0")}`;
+  const user_id =
+    `${prefix}${String(nextNumber).padStart(padding, "0")}`;
+
+  return {
+    user_id,
+    fk_user_id: nextNumber,
+  };
 };
 
 
@@ -98,16 +98,21 @@ const createUser = async (user) => {
     phone,
     password,
     gender,
-    role = 2,
+    role,
   } = user;
 
-  // Generate U0001 / D0001 / A001
-  const user_id = await generateCustomUserId(role);
+  const numericRole = Number(role);
+
+  const generatedId = await generateCustomUserId(numericRole);
+
+  const user_id = generatedId.user_id;
+  const fk_user_id = generatedId.fk_user_id;
 
   const [result] = await db.query(
     `
       INSERT INTO users
       (
+        fk_user_id,
         user_id,
         full_name,
         email,
@@ -116,21 +121,23 @@ const createUser = async (user) => {
         gender,
         role
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
+      fk_user_id,
       user_id,
       full_name,
       email,
       phone,
       password,
       gender,
-      role,
+      numericRole,
     ]
   );
 
   return {
     id: result.insertId,
+    fk_user_id,
     user_id,
   };
 };
