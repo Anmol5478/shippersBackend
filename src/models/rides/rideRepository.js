@@ -13,7 +13,7 @@ const searchRides = async ({
   let query = `
     SELECT
       id,
-      traveller_user_id,
+      user_id,
       pickup_city,
       pickup_state,
       drop_city,
