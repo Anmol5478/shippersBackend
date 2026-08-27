@@ -1,7 +1,7 @@
 const db = require("../../config/db");
 
 /**
- * Search available rides
+ * Search available rides with traveller details
  */
 const searchRides = async ({
   from,
@@ -12,21 +12,35 @@ const searchRides = async ({
 }) => {
   let query = `
     SELECT
-      id,
-      user_id,
-      pickup_city,
-      pickup_state,
-      drop_city,
-      drop_state,
-      travel_date,
-      departure_time,
-      available_weight,
-      status,
-      notes,
-      created_at,
-      updated_at
+      rides.id,
+
+      rides.user_id,
+
+      users.full_name AS traveller_name,
+      users.phone AS traveller_phone,
+
+      rides.pickup_city,
+      rides.pickup_state,
+
+      rides.drop_city,
+      rides.drop_state,
+
+      rides.travel_date,
+      rides.departure_time,
+
+      rides.available_weight,
+      rides.status,
+      rides.notes,
+
+      rides.created_at,
+      rides.updated_at
+
     FROM rides
-    WHERE status = 'active'
+
+    INNER JOIN users
+      ON rides.user_id = users.user_id
+
+    WHERE rides.status = 'active'
   `;
 
   const params = [];
@@ -37,7 +51,7 @@ const searchRides = async ({
 
   if (from) {
     query += `
-      AND LOWER(pickup_city) = LOWER(?)
+      AND LOWER(rides.pickup_city) = LOWER(?)
     `;
 
     params.push(from);
@@ -49,7 +63,7 @@ const searchRides = async ({
 
   if (to) {
     query += `
-      AND LOWER(drop_city) = LOWER(?)
+      AND LOWER(rides.drop_city) = LOWER(?)
     `;
 
     params.push(to);
@@ -61,7 +75,7 @@ const searchRides = async ({
 
   if (date) {
     query += `
-      AND travel_date = ?
+      AND rides.travel_date = ?
     `;
 
     params.push(date);
@@ -76,7 +90,7 @@ const searchRides = async ({
     maxWeight !== null
   ) {
     query += `
-      AND available_weight BETWEEN ? AND ?
+      AND rides.available_weight BETWEEN ? AND ?
     `;
 
     params.push(
@@ -91,7 +105,7 @@ const searchRides = async ({
 
   else if (minWeight !== null) {
     query += `
-      AND available_weight >= ?
+      AND rides.available_weight >= ?
     `;
 
     params.push(minWeight);
@@ -103,8 +117,8 @@ const searchRides = async ({
 
   query += `
     ORDER BY
-      travel_date ASC,
-      departure_time ASC
+      rides.travel_date ASC,
+      rides.departure_time ASC
   `;
 
   const [rows] = await db.query(
@@ -114,6 +128,7 @@ const searchRides = async ({
 
   return rows;
 };
+
 
 /**
  * Create a new ride
@@ -129,6 +144,7 @@ const createRide = async ({
   available_weight,
   notes,
 }) => {
+
   const query = `
     INSERT INTO rides (
       user_id,
@@ -173,7 +189,6 @@ const createRide = async ({
     drop_state,
 
     travel_date,
-
     departure_time,
 
     available_weight,
@@ -183,6 +198,7 @@ const createRide = async ({
     notes,
   };
 };
+
 
 module.exports = {
   searchRides,
