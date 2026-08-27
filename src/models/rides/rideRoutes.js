@@ -2,7 +2,9 @@ const express = require("express");
 
 const router = express.Router();
 
-const rideController = require("./rideController");
+const rideController =
+  require("./rideController");
+
 
 /**
  * @swagger
@@ -50,11 +52,40 @@ const rideController = require("./rideController");
  *     responses:
  *       200:
  *         description: Rides fetched successfully
+ */
+router.get(
+  "/search",
+  rideController.searchRides
+);
+
+
+/**
+ * @swagger
+ * /api/rides/user/{userId}:
+ *   get:
+ *     summary: Get rides published by a user
+ *     description: Returns all rides published by a specific user.
+ *     tags:
+ *       - Rides
+ *
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: U0001
+ *         description: User ID of the ride publisher
+ *
+ *     responses:
+ *       200:
+ *         description: User rides fetched successfully
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
+ *
  *                 responseCode:
  *                   type: string
  *                   example: "00"
@@ -65,7 +96,7 @@ const rideController = require("./rideController");
  *
  *                 message:
  *                   type: string
- *                   example: Rides found successfully
+ *                   example: User rides fetched successfully
  *
  *                 data:
  *                   type: array
@@ -77,9 +108,9 @@ const rideController = require("./rideController");
  *                         type: integer
  *                         example: 1
  *
- *                       traveller_user_id:
+ *                       user_id:
  *                         type: string
- *                         example: "USR123456"
+ *                         example: U0001
  *
  *                       pickup_city:
  *                         type: string
@@ -117,39 +148,19 @@ const rideController = require("./rideController");
  *                       notes:
  *                         type: string
  *                         example: Travelling by car
- *
- *       400:
- *         description: Invalid search parameters
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *
- *                 responseCode:
- *                   type: string
- *                   example: "01"
- *
- *                 success:
- *                   type: boolean
- *                   example: false
- *
- *                 message:
- *                   type: string
- *                   example: From and To locations are required
  */
-
 router.get(
-  "/search",
-  rideController.searchRides
+  "/user/:userId",
+  rideController.getUserRides
 );
+
 
 /**
  * @swagger
  * /api/rides:
  *   post:
  *     summary: Create a new journey
- *     description: Creates a new ride or journey for a traveller.
+ *     description: Creates a new ride or journey.
  *     tags:
  *       - Rides
  *
@@ -162,7 +173,7 @@ router.get(
  *             type: object
  *
  *             required:
- *               - traveller_user_id
+ *               - user_id
  *               - pickup_city
  *               - drop_city
  *               - travel_date
@@ -171,10 +182,10 @@ router.get(
  *
  *             properties:
  *
- *               traveller_user_id:
+ *               user_id:
  *                 type: string
- *                 example: "USR123456"
- *                 description: ID of the traveller creating the journey
+ *                 example: U0001
+ *                 description: ID of the user creating the journey
  *
  *               pickup_city:
  *                 type: string
@@ -204,7 +215,6 @@ router.get(
  *               available_weight:
  *                 type: number
  *                 example: 5
- *                 description: Available parcel carrying capacity in kilograms
  *
  *               notes:
  *                 type: string
@@ -214,101 +224,11 @@ router.get(
  *     responses:
  *       201:
  *         description: Journey created successfully
- *
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *
- *               properties:
- *
- *                 responseCode:
- *                   type: string
- *                   example: "00"
- *
- *                 success:
- *                   type: boolean
- *                   example: true
- *
- *                 message:
- *                   type: string
- *                   example: Journey added successfully
- *
- *                 data:
- *                   type: object
- *
- *                   properties:
- *
- *                     id:
- *                       type: integer
- *                       example: 1
- *
- *                     traveller_user_id:
- *                       type: string
- *                       example: "USR123456"
- *
- *                     pickup_city:
- *                       type: string
- *                       example: Ghaziabad
- *
- *                     pickup_state:
- *                       type: string
- *                       example: Uttar Pradesh
- *
- *                     drop_city:
- *                       type: string
- *                       example: Dehradun
- *
- *                     drop_state:
- *                       type: string
- *                       example: Uttarakhand
- *
- *                     travel_date:
- *                       type: string
- *                       example: "2026-08-30"
- *
- *                     departure_time:
- *                       type: string
- *                       example: "09:30:00"
- *
- *                     available_weight:
- *                       type: number
- *                       example: 5
- *
- *                     status:
- *                       type: string
- *                       example: active
- *
- *                     notes:
- *                       type: string
- *                       example: Travelling by car
- *
- *       400:
- *         description: Validation error
- *
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *
- *               properties:
- *
- *                 responseCode:
- *                   type: string
- *                   example: "01"
- *
- *                 success:
- *                   type: boolean
- *                   example: false
- *
- *                 message:
- *                   type: string
- *                   example: Pickup city is required
  */
-
 router.post(
   "/",
   rideController.createRide
 );
+
 
 module.exports = router;

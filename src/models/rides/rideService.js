@@ -7,11 +7,17 @@ const searchRides = async (query) => {
   const { from, to, weight, date } = query;
 
   if (!from || !to) {
-    throw new Error("From and To locations are required");
+    throw new Error(
+      "From and To locations are required"
+    );
   }
 
   let minWeight = null;
   let maxWeight = null;
+
+  // =========================
+  // WEIGHT FILTER
+  // =========================
 
   if (weight) {
     if (weight.includes("-")) {
@@ -26,16 +32,22 @@ const searchRides = async (query) => {
         minWeight < 0 ||
         maxWeight <= minWeight
       ) {
-        throw new Error("Invalid weight range");
+        throw new Error(
+          "Invalid weight range"
+        );
       }
     } else if (weight.endsWith("+")) {
-      minWeight = Number(weight.replace("+", ""));
+      minWeight = Number(
+        weight.replace("+", "")
+      );
 
       if (
         Number.isNaN(minWeight) ||
         minWeight < 0
       ) {
-        throw new Error("Invalid weight");
+        throw new Error(
+          "Invalid weight"
+        );
       }
     } else {
       throw new Error(
@@ -52,6 +64,23 @@ const searchRides = async (query) => {
     date,
   });
 };
+
+
+/**
+ * Get all rides published by a user
+ */
+const getUserRides = async (user_id) => {
+  if (!user_id || !user_id.trim()) {
+    throw new Error(
+      "User ID is required"
+    );
+  }
+
+  return await rideRepository.getUserRides(
+    user_id.trim()
+  );
+};
+
 
 /**
  * Create a new ride
@@ -74,23 +103,39 @@ const createRide = async (data) => {
   // =========================
 
   if (!user_id) {
-    throw new Error("Traveller user ID is required");
+    throw new Error(
+      "User ID is required"
+    );
   }
 
-  if (!pickup_city || !pickup_city.trim()) {
-    throw new Error("Pickup city is required");
+  if (
+    !pickup_city ||
+    !pickup_city.trim()
+  ) {
+    throw new Error(
+      "Pickup city is required"
+    );
   }
 
-  if (!drop_city || !drop_city.trim()) {
-    throw new Error("Drop city is required");
+  if (
+    !drop_city ||
+    !drop_city.trim()
+  ) {
+    throw new Error(
+      "Drop city is required"
+    );
   }
 
   if (!travel_date) {
-    throw new Error("Travel date is required");
+    throw new Error(
+      "Travel date is required"
+    );
   }
 
   if (!departure_time) {
-    throw new Error("Departure time is required");
+    throw new Error(
+      "Departure time is required"
+    );
   }
 
   if (
@@ -98,14 +143,18 @@ const createRide = async (data) => {
     available_weight === null ||
     available_weight === ""
   ) {
-    throw new Error("Available weight is required");
+    throw new Error(
+      "Available weight is required"
+    );
   }
 
   // =========================
   // VALIDATE WEIGHT
   // =========================
 
-  const weight = Number(available_weight);
+  const weight = Number(
+    available_weight
+  );
 
   if (
     Number.isNaN(weight) ||
@@ -149,12 +198,14 @@ const createRide = async (data) => {
   return await rideRepository.createRide({
     user_id: user_id.trim(),
 
-    pickup_city: pickup_city.trim(),
+    pickup_city:
+      pickup_city.trim(),
 
     pickup_state:
       pickup_state?.trim() || null,
 
-    drop_city: drop_city.trim(),
+    drop_city:
+      drop_city.trim(),
 
     drop_state:
       drop_state?.trim() || null,
@@ -170,7 +221,9 @@ const createRide = async (data) => {
   });
 };
 
+
 module.exports = {
   searchRides,
+  getUserRides,
   createRide,
 };

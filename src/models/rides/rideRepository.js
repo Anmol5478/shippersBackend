@@ -1,7 +1,7 @@
 const db = require("../../config/db");
 
 /**
- * Search available rides with traveller details
+ * Search available active rides with traveller details
  */
 const searchRides = async ({
   from,
@@ -13,7 +13,6 @@ const searchRides = async ({
   let query = `
     SELECT
       rides.id,
-
       rides.user_id,
 
       users.full_name AS traveller_name,
@@ -100,7 +99,7 @@ const searchRides = async ({
   }
 
   // =========================
-  // WEIGHT 5+
+  // MINIMUM WEIGHT
   // =========================
 
   else if (minWeight !== null) {
@@ -131,6 +130,49 @@ const searchRides = async ({
 
 
 /**
+ * Get all rides published by a specific user
+ */
+const getUserRides = async (user_id) => {
+  const query = `
+    SELECT
+      id,
+      user_id,
+
+      pickup_city,
+      pickup_state,
+
+      drop_city,
+      drop_state,
+
+      travel_date,
+      departure_time,
+
+      available_weight,
+      status,
+      notes,
+
+      created_at,
+      updated_at
+
+    FROM rides
+
+    WHERE user_id = ?
+
+    ORDER BY
+      travel_date DESC,
+      departure_time DESC
+  `;
+
+  const [rows] = await db.query(
+    query,
+    [user_id]
+  );
+
+  return rows;
+};
+
+
+/**
  * Create a new ride
  */
 const createRide = async ({
@@ -144,7 +186,6 @@ const createRide = async ({
   available_weight,
   notes,
 }) => {
-
   const query = `
     INSERT INTO rides (
       user_id,
@@ -202,5 +243,6 @@ const createRide = async ({
 
 module.exports = {
   searchRides,
+  getUserRides,
   createRide,
 };

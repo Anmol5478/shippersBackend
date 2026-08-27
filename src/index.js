@@ -19,6 +19,7 @@ const forgotPasswordRoutes = require(
   "./models/forgotpassword/forgotPasswordRoutes"
 );
 const rideRoutes = require("./models/rides/rideRoutes");
+const profileRoutes =require("./models/profile/profileRoutes");
 const PORT = process.env.PORT || 8000;
 
 app.get("/", async (req, res) => {
@@ -116,6 +117,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/cities", cityRoutes);
 app.use("/api/auth", forgotPasswordRoutes);
 app.use("/api/rides", rideRoutes);
+app.use("/api/profile", profileRoutes);
 
 
 app.use(

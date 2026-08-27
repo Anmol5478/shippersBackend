@@ -1,11 +1,15 @@
 const rideService = require("./rideService");
 
+
 /**
- * Search rides
+ * Search available rides
  */
 exports.searchRides = async (req, res) => {
   try {
-    const rides = await rideService.searchRides(req.query);
+    const rides =
+      await rideService.searchRides(
+        req.query
+      );
 
     return res.status(200).json({
       responseCode: "00",
@@ -16,6 +20,7 @@ exports.searchRides = async (req, res) => {
           : "No rides found",
       data: rides,
     });
+
   } catch (error) {
     return res.status(400).json({
       responseCode: "01",
@@ -25,12 +30,54 @@ exports.searchRides = async (req, res) => {
   }
 };
 
+
+/**
+ * Get rides published by a specific user
+ */
+exports.getUserRides = async (
+  req,
+  res
+) => {
+  try {
+    const { userId } = req.params;
+
+    const rides =
+      await rideService.getUserRides(
+        userId
+      );
+
+    return res.status(200).json({
+      responseCode: "00",
+      success: true,
+      message:
+        rides.length > 0
+          ? "User rides fetched successfully"
+          : "No rides found for this user",
+      data: rides,
+    });
+
+  } catch (error) {
+    return res.status(400).json({
+      responseCode: "01",
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 /**
  * Create a new ride
  */
-exports.createRide = async (req, res) => {
+exports.createRide = async (
+  req,
+  res
+) => {
   try {
-    const ride = await rideService.createRide(req.body);
+    const ride =
+      await rideService.createRide(
+        req.body
+      );
 
     return res.status(201).json({
       responseCode: "00",
@@ -38,6 +85,7 @@ exports.createRide = async (req, res) => {
       message: "Journey added successfully",
       data: ride,
     });
+
   } catch (error) {
     return res.status(400).json({
       responseCode: "01",
