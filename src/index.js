@@ -4,7 +4,6 @@ const cors = require("cors");
 const db = require("./config/db");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
-const kycRoutes =require("./modules/kyc/kycRoutes");
 
 
 dotenv.config();
@@ -20,7 +19,9 @@ const cityRoutes = require("./models/cities/cityRoutes");
 const forgotPasswordRoutes = require(
   "./models/forgotpassword/forgotPasswordRoutes"
 );
-const rideRoutes = require("./models/rides/rideRoutes");
+const kycRoutes = 
+require("./modules/kyc/kycRoutes");
+const rideRoutes = require("./models/kyc/kycRoutes");
 const profileRoutes =require("./models/profile/profileRoutes");
 const PORT = process.env.PORT || 8000;
 
