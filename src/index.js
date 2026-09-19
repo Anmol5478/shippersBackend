@@ -19,8 +19,8 @@ const cityRoutes = require("./models/cities/cityRoutes");
 const forgotPasswordRoutes = require(
   "./models/forgotpassword/forgotPasswordRoutes"
 );
-const kycRoutes = require("./modules/kyc/kycRoutes");
-const rideRoutes = require("./models/kyc/kycRoutes");
+const kycRoutes = equire("./modules/kyc/kycRoutes");
+const rideRoutes = require("./models/rides/rideRoutes");
 const profileRoutes =require("./models/profile/profileRoutes");
 const PORT = process.env.PORT || 8000;
 
@@ -122,7 +122,10 @@ app.use("/api/auth", forgotPasswordRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/profile", profileRoutes);
 
-app.use( "/api/kyc",kycRoutes);
+app.use(
+  "/api/kyc",
+  kycRoutes
+);
 
 
 app.use(
