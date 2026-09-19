@@ -4,6 +4,8 @@ const cors = require("cors");
 const db = require("./config/db");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
+const kycRoutes =require("./modules/kyc/kycRoutes");
+
 
 dotenv.config();
 
@@ -29,6 +31,7 @@ const cors = require("cors");
 const db = require("./config/db");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
+
 
 dotenv.config();
 
@@ -118,6 +121,11 @@ app.use("/api/cities", cityRoutes);
 app.use("/api/auth", forgotPasswordRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/profile", profileRoutes);
+
+app.use(
+  "/api/kyc",
+  kycRoutes
+);
 
 
 app.use(

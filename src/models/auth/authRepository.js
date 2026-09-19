@@ -31,6 +31,32 @@ const findUser = async (loginId) => {
   return rows[0];
 };
 
+/* =================================
+   FIND USER KYC
+================================= */
+
+const findKycByUserId = async (userId) => {
+  const [rows] = await db.query(
+    `
+      SELECT
+        id,
+        user_id,
+        kyc_status,
+        aadhaar_verified,
+        pan_verified,
+        selfie_verified,
+        rejection_reason,
+        verified_by,
+        verified_at
+      FROM user_kyc
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  return rows[0] || null;
+};
 
 /* ================================
    GENERATE USER ID
@@ -86,7 +112,6 @@ const generateCustomUserId = async (role) => {
   };
 };
 
-
 /* ================================
    CREATE USER
 ================================ */
@@ -103,7 +128,8 @@ const createUser = async (user) => {
 
   const numericRole = Number(role);
 
-  const generatedId = await generateCustomUserId(numericRole);
+  const generatedId =
+    await generateCustomUserId(numericRole);
 
   const user_id = generatedId.user_id;
   const fk_user_id = generatedId.fk_user_id;
@@ -142,7 +168,6 @@ const createUser = async (user) => {
   };
 };
 
-
 const updatePassword = async (email, password) => {
   await db.query(
     `
@@ -154,11 +179,11 @@ const updatePassword = async (email, password) => {
   );
 };
 
-
 module.exports = {
   findUserByEmail,
   findUserByPhone,
   findUser,
+  findKycByUserId,
   generateCustomUserId,
   createUser,
   updatePassword,
