@@ -15,7 +15,7 @@ const uploadToR2 = async ({
   userId,
   documentType,
 }) => {
-  const key = `kyc/${userId}/${documentType}/${Date.now()}.webp`;
+const key = `kyc/${userId}/${userId+documentType}.webp`;
 
   const command = new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME,

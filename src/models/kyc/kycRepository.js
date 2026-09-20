@@ -40,36 +40,37 @@ const createOrGetKyc = async (userId) => {
   return kyc;
 };
 
-const updateDocumentKey = async ({
+const updateKycStatus = async ({
   userId,
-  documentType,
-  documentKey,
+  status,
+  rejectionReason = null,
+  approvedBy = null,
 }) => {
-  const columns = {
-    aadhaar_front: "aadhaar_front_document_key",
-    aadhaar_back: "aadhaar_back_document_key",
-    pan: "pan_document_key",
-    selfie: "selfie_document_key",
-  };
+  const allowedStatuses = [
+    "PENDING",
+    "VERIFIED",
+    "REJECTED",
+  ];
 
-  const column = columns[documentType];
-
-  if (!column) {
-    throw new Error("Invalid document type");
+  if (!allowedStatuses.includes(status)) {
+    throw new Error("Invalid KYC status");
   }
-
-  await createOrGetKyc(userId);
 
   await db.execute(
     `
-    UPDATE user_kyc
-    SET
-      ${column} = ?,
-      kyc_status = 'PENDING',
-      rejection_reason = NULL
-    WHERE user_id = ?
+      UPDATE user_kyc
+      SET
+        kyc_status = ?,
+        rejection_reason = ?,
+        approved_by = ?
+      WHERE user_id = ?
     `,
-    [documentKey, userId]
+    [
+      status,
+      rejectionReason,
+      approvedBy,
+      userId,
+    ]
   );
 
   return findKycByUserId(userId);
