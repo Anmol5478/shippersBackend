@@ -36,18 +36,20 @@ const findUser = async (loginId) => {
 ================================= */
 
 const findKycByUserId = async (userId) => {
-  const [rows] = await db.query(
+  const [rows] = await db.execute(
     `
       SELECT
         id,
         user_id,
+        aadhaar_front_document_key,
+        aadhaar_back_document_key,
+        pan_document_key,
+        selfie_document_key,
         kyc_status,
-        aadhaar_verified,
-        pan_verified,
-        selfie_verified,
         rejection_reason,
-        verified_by,
-        verified_at
+        approved_by,
+        created_at,
+        updated_at
       FROM user_kyc
       WHERE user_id = ?
       LIMIT 1
