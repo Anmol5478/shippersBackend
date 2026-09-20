@@ -177,10 +177,6 @@ if (!kycDocuments.selfie) {
   kycPendingDocuments.push("selfie");
 }
 
-const kyc =
-  kycStatus === "VERIFIED"
-    ? "Y"
-    : "N";
   /*
    * Only VERIFIED means KYC = Y.
    *
