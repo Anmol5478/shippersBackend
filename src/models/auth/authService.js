@@ -136,17 +136,51 @@ const login = async (payload) => {
     );
   }
 
-  /*
-   * ===============================
-   * CHECK KYC
-   * ===============================
-   */
 
-  const kycRecord =
-    await authRepository.findKycByUserId(
-      user.user_id
-    );
+// =================================
+// CHECK KYC STATUS + DOCUMENTS
+// =================================
 
+const kycRecord =
+  await authRepository.getKycSummaryByUserId(
+    user.user_id
+  );
+
+const kycStatus =
+  kycRecord?.kyc_status || "NOT_SUBMITTED";
+
+const kycCompleted =
+  kycStatus === "VERIFIED";
+
+const kycDocuments = {
+  aadhaarFront: !!kycRecord?.aadhaar_front_document_key,
+  aadhaarBack: !!kycRecord?.aadhaar_back_document_key,
+  pan: !!kycRecord?.pan_document_key,
+  selfie: !!kycRecord?.selfie_document_key,
+};
+
+const kycPendingDocuments = [];
+
+if (!kycDocuments.aadhaarFront) {
+  kycPendingDocuments.push("aadhaar_front");
+}
+
+if (!kycDocuments.aadhaarBack) {
+  kycPendingDocuments.push("aadhaar_back");
+}
+
+if (!kycDocuments.pan) {
+  kycPendingDocuments.push("pan");
+}
+
+if (!kycDocuments.selfie) {
+  kycPendingDocuments.push("selfie");
+}
+
+const kyc =
+  kycStatus === "VERIFIED"
+    ? "Y"
+    : "N";
   /*
    * Only VERIFIED means KYC = Y.
    *
@@ -172,24 +206,26 @@ const login = async (payload) => {
       role: user.role,
     });
 
-  return {
-    user: {
-      id: user.id,
-      user_id: user.user_id,
-      full_name: user.full_name,
-      email: user.email,
-      phone: user.phone,
-      gender: user.gender ?? null,
-      role: user.role,
+return {
+  user: {
+    id: user.id,
+    user_id: user.user_id,
+    full_name: user.full_name,
+    email: user.email,
+    phone: user.phone,
+    gender: user.gender ?? null,
+    role: user.role,
 
-      /*
-       * KYC FLAG
-       */
-      kyc,
-    },
+    // KYC
+    kyc,
+    kycStatus,
+    kycCompleted,
+    kycDocuments,
+    kycPendingDocuments,
+  },
 
-    accessToken,
-  };
+  accessToken,
+};
 };
 
 module.exports = {

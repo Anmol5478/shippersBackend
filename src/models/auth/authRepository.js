@@ -179,6 +179,23 @@ const updatePassword = async (email, password) => {
     `,
     [password, email]
   );
+};const getKycSummaryByUserId = async (userId) => {
+  const [rows] = await db.execute(
+    `
+      SELECT
+        kyc_status,
+        aadhaar_front_document_key,
+        aadhaar_back_document_key,
+        pan_document_key,
+        selfie_document_key
+      FROM user_kyc
+      WHERE user_id = ?
+      LIMIT 1
+    `,
+    [userId]
+  );
+
+  return rows[0] || null;
 };
 
 module.exports = {
@@ -189,4 +206,5 @@ module.exports = {
   generateCustomUserId,
   createUser,
   updatePassword,
+  getKycSummaryByUserId,
 };
