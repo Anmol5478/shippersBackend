@@ -114,44 +114,15 @@ const calculateRoutes = async (pickup, drop) => {
  * application format.
  */
 const normalizeOlaRoutes = (data) => {
-  /*
-   * IMPORTANT:
-   * Keep the provider-specific response handling
-   * inside this function.
-   *
-   * If Ola changes its response structure,
-   * only this function needs to change.
-   */
-
-  const olaRoutes =
-    data?.routes ||
-    data?.data?.routes ||
-    [];
+  const olaRoutes = data?.routes || [];
 
   if (!Array.isArray(olaRoutes)) {
     return [];
   }
 
   return olaRoutes.map((route, index) => {
-    const distanceMeters =
-      Number(
-        route.distance ||
-        route.distanceMeters ||
-        0
-      );
-
-    const durationSeconds =
-      parseDuration(
-        route.duration ||
-        route.durationSeconds ||
-        0
-      );
-
-    const polyline =
-      route.overview_polyline ||
-      route.polyline ||
-      route.geometry ||
-      null;
+    const distanceMeters = Number(route.distance || 0);
+    const durationSeconds = Number(route.duration || 0);
 
     return {
       route_index: index,
@@ -164,12 +135,23 @@ const normalizeOlaRoutes = (data) => {
         durationSeconds / 60
       ),
 
-      polyline,
+      polyline: route.overview_polyline || null,
 
-      description:
-        route.summary ||
-        route.description ||
-        null,
+      description: route.summary || null,
+
+      start_location: route.start_location
+        ? {
+            latitude: Number(route.start_location.lat),
+            longitude: Number(route.start_location.lng),
+          }
+        : null,
+
+      end_location: route.end_location
+        ? {
+            latitude: Number(route.end_location.lat),
+            longitude: Number(route.end_location.lng),
+          }
+        : null,
     };
   });
 };
