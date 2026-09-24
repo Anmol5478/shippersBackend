@@ -17,6 +17,10 @@ const calculateRoutes = async (pickup, drop) => {
     const dropLatitude = Number(drop.latitude);
     const dropLongitude = Number(drop.longitude);
 
+    // -----------------------------------------
+    // Validate coordinates
+    // -----------------------------------------
+
     if (
       !Number.isFinite(pickupLatitude) ||
       !Number.isFinite(pickupLongitude) ||
@@ -46,24 +50,65 @@ const calculateRoutes = async (pickup, drop) => {
       throw new Error("Invalid longitude");
     }
 
+    if (
+      pickupLatitude === dropLatitude &&
+      pickupLongitude === dropLongitude
+    ) {
+      throw new Error(
+        "Pickup and drop locations cannot be the same"
+      );
+    }
+
+    // -----------------------------------------
+    // Validate Ola API key
+    // -----------------------------------------
+
+    if (!process.env.OLA_MAPS_API_KEY) {
+      throw new Error(
+        "OLA_MAPS_API_KEY is not configured"
+      );
+    }
+
+    // -----------------------------------------
+    // Ola Maps request
+    // -----------------------------------------
+
     const params = {
       origin: `${pickupLatitude},${pickupLongitude}`,
       destination: `${dropLatitude},${dropLongitude}`,
-
       api_key: process.env.OLA_MAPS_API_KEY,
-
-      // Ask Ola for alternative routes
-      alternatives: true,
-
-      // Use traffic-aware routing
-      traffic_metadata: true,
 
       // Return route geometry
       overview: "full",
+
+      // Ask Ola for alternatives
+      alternatives: true,
+
+      // Traffic information
+      traffic_metadata: true,
     };
 
-    const response = await axios.get(
+    console.log(
+      "Calling Ola Maps:",
+      OLA_DIRECTIONS_URL
+    );
+
+    console.log(
+      "Ola Maps params:",
+      {
+        origin: params.origin,
+        destination: params.destination,
+        overview: params.overview,
+        alternatives: params.alternatives,
+        traffic_metadata: params.traffic_metadata,
+      }
+    );
+
+    // IMPORTANT:
+    // The working Postman request uses POST
+    const response = await axios.post(
       OLA_DIRECTIONS_URL,
+      null,
       {
         params,
 
@@ -82,6 +127,10 @@ const calculateRoutes = async (pickup, drop) => {
       JSON.stringify(data, null, 2)
     );
 
+    // -----------------------------------------
+    // Normalize Ola response
+    // -----------------------------------------
+
     const routes = normalizeOlaRoutes(data);
 
     if (!routes.length) {
@@ -93,13 +142,38 @@ const calculateRoutes = async (pickup, drop) => {
     return routes;
   } catch (error) {
     console.error(
-      "Ola Maps routing error:",
-      error?.response?.data || error.message
+      "========== OLA MAPS ERROR =========="
+    );
+
+    console.error(
+      "Message:",
+      error?.message
+    );
+
+    console.error(
+      "Status:",
+      error?.response?.status
+    );
+
+    console.error(
+      "Response:",
+      JSON.stringify(
+        error?.response?.data,
+        null,
+        2
+      )
+    );
+
+    console.error(
+      "===================================="
     );
 
     const olaMessage =
       error?.response?.data?.message ||
-      error?.response?.data?.error;
+      error?.response?.data?.error_msg ||
+      error?.response?.data?.error?.message ||
+      error?.response?.data?.error ||
+      error?.message;
 
     throw new Error(
       olaMessage ||
@@ -108,10 +182,18 @@ const calculateRoutes = async (pickup, drop) => {
   }
 };
 
-
 /**
- * Convert Ola Maps response into our own
- * application format.
+ * Convert Ola Maps response into
+ * our application format.
+ *
+ * Actual Ola response:
+ *
+ * routes[]
+ *   distance
+ *   duration
+ *   overview_polyline
+ *   start_location
+ *   end_location
  */
 const normalizeOlaRoutes = (data) => {
   const olaRoutes = data?.routes || [];
@@ -120,83 +202,65 @@ const normalizeOlaRoutes = (data) => {
     return [];
   }
 
-  return olaRoutes.map((route, index) => {
-    const distanceMeters = Number(route.distance || 0);
-    const durationSeconds = Number(route.duration || 0);
+  return olaRoutes
+    .map((route, index) => {
+      const distanceMeters = Number(
+        route.distance || 0
+      );
 
-    return {
-      route_index: index,
+      const durationSeconds = Number(
+        route.duration || 0
+      );
 
-      distance_km: Number(
-        (distanceMeters / 1000).toFixed(2)
-      ),
+      return {
+        route_index: index,
 
-      duration_minutes: Math.ceil(
-        durationSeconds / 60
-      ),
+        distance_km: Number(
+          (distanceMeters / 1000).toFixed(2)
+        ),
 
-      polyline: route.overview_polyline || null,
+        duration_minutes: Math.ceil(
+          durationSeconds / 60
+        ),
 
-      description: route.summary || null,
+        polyline:
+          route.overview_polyline || null,
 
-      start_location: route.start_location
-        ? {
-            latitude: Number(route.start_location.lat),
-            longitude: Number(route.start_location.lng),
-          }
-        : null,
+        description:
+          route.summary || null,
 
-      end_location: route.end_location
-        ? {
-            latitude: Number(route.end_location.lat),
-            longitude: Number(route.end_location.lng),
-          }
-        : null,
-    };
-  });
+        start_location:
+          route.start_location
+            ? {
+                latitude: Number(
+                  route.start_location.lat
+                ),
+                longitude: Number(
+                  route.start_location.lng
+                ),
+              }
+            : null,
+
+        end_location:
+          route.end_location
+            ? {
+                latitude: Number(
+                  route.end_location.lat
+                ),
+                longitude: Number(
+                  route.end_location.lng
+                ),
+              }
+            : null,
+      };
+    })
+    .filter(
+      (route) =>
+        route.distance_km > 0 &&
+        route.duration_minutes > 0 &&
+        route.polyline
+    );
 };
-
-
-/**
- * Handles:
- *
- * 1200
- * "1200"
- * "1200s"
- * "20m"
- */
-const parseDuration = (duration) => {
-  if (duration === null || duration === undefined) {
-    return 0;
-  }
-
-  if (typeof duration === "number") {
-    return duration;
-  }
-
-  const value = String(duration).trim();
-
-  if (/^\d+(\.\d+)?$/.test(value)) {
-    return Number(value);
-  }
-
-  const secondsMatch =
-    value.match(/^([\d.]+)s$/i);
-
-  if (secondsMatch) {
-    return Number(secondsMatch[1]);
-  }
-
-  const minutesMatch =
-    value.match(/^([\d.]+)m$/i);
-
-  if (minutesMatch) {
-    return Number(minutesMatch[1]) * 60;
-  }
-
-  return 0;
-};
-
 
 module.exports = {
   calculateRoutes,
