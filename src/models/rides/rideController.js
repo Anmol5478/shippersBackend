@@ -1,10 +1,12 @@
 const rideService = require("./rideService");
 
-
 /**
  * Search available rides
  */
-exports.searchRides = async (req, res) => {
+exports.searchRides = async (
+  req,
+  res
+) => {
   try {
     const rides =
       await rideService.searchRides(
@@ -14,14 +16,20 @@ exports.searchRides = async (req, res) => {
     return res.status(200).json({
       responseCode: "00",
       success: true,
+
       message:
         rides.length > 0
           ? "Rides found successfully"
           : "No rides found",
+
       data: rides,
     });
-
   } catch (error) {
+    console.error(
+      "searchRides controller error:",
+      error
+    );
+
     return res.status(400).json({
       responseCode: "01",
       success: false,
@@ -29,7 +37,6 @@ exports.searchRides = async (req, res) => {
     });
   }
 };
-
 
 /**
  * Get rides published by a specific user
@@ -39,7 +46,9 @@ exports.getUserRides = async (
   res
 ) => {
   try {
-    const { userId } = req.params;
+    const {
+      userId,
+    } = req.params;
 
     const rides =
       await rideService.getUserRides(
@@ -49,14 +58,20 @@ exports.getUserRides = async (
     return res.status(200).json({
       responseCode: "00",
       success: true,
+
       message:
         rides.length > 0
           ? "User rides fetched successfully"
           : "No rides found for this user",
+
       data: rides,
     });
-
   } catch (error) {
+    console.error(
+      "getUserRides controller error:",
+      error
+    );
+
     return res.status(400).json({
       responseCode: "01",
       success: false,
@@ -64,7 +79,6 @@ exports.getUserRides = async (
     });
   }
 };
-
 
 /**
  * Create a new ride
@@ -82,11 +96,50 @@ exports.createRide = async (
     return res.status(201).json({
       responseCode: "00",
       success: true,
-      message: "Journey added successfully",
+      message:
+        "Journey added successfully",
       data: ride,
     });
-
   } catch (error) {
+    console.error(
+      "createRide controller error:",
+      error
+    );
+
+    return res.status(400).json({
+      responseCode: "01",
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Calculate alternative routes
+ */
+exports.calculateRoutes = async (
+  req,
+  res
+) => {
+  try {
+    const routes =
+      await rideService.calculateRoutes(
+        req.body
+      );
+
+    return res.status(200).json({
+      responseCode: "00",
+      success: true,
+      message:
+        "Routes calculated successfully",
+      data: routes,
+    });
+  } catch (error) {
+    console.error(
+      "calculateRoutes controller error:",
+      error
+    );
+
     return res.status(400).json({
       responseCode: "01",
       success: false,

@@ -20,14 +20,25 @@ const searchRides = async ({
 
       rides.pickup_city,
       rides.pickup_state,
+      rides.pickup_latitude,
+      rides.pickup_longitude,
 
       rides.drop_city,
       rides.drop_state,
+      rides.drop_latitude,
+      rides.drop_longitude,
 
       rides.travel_date,
       rides.departure_time,
 
       rides.available_weight,
+      rides.price_per_kg,
+
+      rides.route_index,
+      rides.route_distance_km,
+      rides.route_duration_minutes,
+      rides.route_polyline,
+
       rides.status,
       rides.notes,
 
@@ -128,7 +139,6 @@ const searchRides = async ({
   return rows;
 };
 
-
 /**
  * Get all rides published by a specific user
  */
@@ -140,14 +150,25 @@ const getUserRides = async (user_id) => {
 
       pickup_city,
       pickup_state,
+      pickup_latitude,
+      pickup_longitude,
 
       drop_city,
       drop_state,
+      drop_latitude,
+      drop_longitude,
 
       travel_date,
       departure_time,
 
       available_weight,
+      price_per_kg,
+
+      route_index,
+      route_distance_km,
+      route_duration_minutes,
+      route_polyline,
+
       status,
       notes,
 
@@ -171,45 +192,97 @@ const getUserRides = async (user_id) => {
   return rows;
 };
 
-
 /**
  * Create a new ride
  */
 const createRide = async ({
   user_id,
+
   pickup_city,
   pickup_state,
+  pickup_latitude,
+  pickup_longitude,
+
   drop_city,
   drop_state,
+  drop_latitude,
+  drop_longitude,
+
   travel_date,
   departure_time,
+
   available_weight,
+  price_per_kg,
+
+  route_index,
+  route_distance_km,
+  route_duration_minutes,
+  route_polyline,
+
   notes,
 }) => {
   const query = `
     INSERT INTO rides (
       user_id,
+
       pickup_city,
       pickup_state,
+      pickup_latitude,
+      pickup_longitude,
+
       drop_city,
       drop_state,
+      drop_latitude,
+      drop_longitude,
+
       travel_date,
       departure_time,
+
       available_weight,
+      price_per_kg,
+
+      route_index,
+      route_distance_km,
+      route_duration_minutes,
+      route_polyline,
+
       notes
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+
+    VALUES (
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?,
+      ?, ?,
+      ?, ?,
+      ?, ?, ?, ?,
+      ?
+    )
   `;
 
   const params = [
     user_id,
+
     pickup_city,
     pickup_state,
+    pickup_latitude,
+    pickup_longitude,
+
     drop_city,
     drop_state,
+    drop_latitude,
+    drop_longitude,
+
     travel_date,
     departure_time,
+
     available_weight,
+    price_per_kg,
+
+    route_index,
+    route_distance_km,
+    route_duration_minutes,
+    route_polyline,
+
     notes,
   ];
 
@@ -225,21 +298,30 @@ const createRide = async ({
 
     pickup_city,
     pickup_state,
+    pickup_latitude,
+    pickup_longitude,
 
     drop_city,
     drop_state,
+    drop_latitude,
+    drop_longitude,
 
     travel_date,
     departure_time,
 
     available_weight,
+    price_per_kg,
+
+    route_index,
+    route_distance_km,
+    route_duration_minutes,
+    route_polyline,
 
     status: "active",
 
     notes,
   };
 };
-
 
 module.exports = {
   searchRides,

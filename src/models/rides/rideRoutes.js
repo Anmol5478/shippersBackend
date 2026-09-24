@@ -5,7 +5,6 @@ const router = express.Router();
 const rideController =
   require("./rideController");
 
-
 /**
  * @swagger
  * /api/rides/search:
@@ -58,7 +57,6 @@ router.get(
   rideController.searchRides
 );
 
-
 /**
  * @swagger
  * /api/rides/user/{userId}:
@@ -80,10 +78,81 @@ router.get(
  *     responses:
  *       200:
  *         description: User rides fetched successfully
+ */
+router.get(
+  "/user/:userId",
+  rideController.getUserRides
+);
+
+/**
+ * @swagger
+ * /api/rides/calculate-routes:
+ *   post:
+ *     summary: Calculate alternative routes
+ *     description: Calculates alternative driving routes between a pickup location and a drop location using Ola Maps.
+ *     tags:
+ *       - Rides
+ *
+ *     security:
+ *       - bearerAuth: []
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *
+ *             required:
+ *               - pickup
+ *               - drop
+ *
+ *             properties:
+ *
+ *               pickup:
+ *                 type: object
+ *                 required:
+ *                   - latitude
+ *                   - longitude
+ *
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                     format: double
+ *                     example: 28.6139
+ *
+ *                   longitude:
+ *                     type: number
+ *                     format: double
+ *                     example: 77.2090
+ *
+ *               drop:
+ *                 type: object
+ *                 required:
+ *                   - latitude
+ *                   - longitude
+ *
+ *                 properties:
+ *                   latitude:
+ *                     type: number
+ *                     format: double
+ *                     example: 26.9124
+ *
+ *                   longitude:
+ *                     type: number
+ *                     format: double
+ *                     example: 75.7873
+ *
+ *     responses:
+ *
+ *       200:
+ *         description: Routes calculated successfully
+ *
  *         content:
  *           application/json:
  *             schema:
  *               type: object
+ *
  *               properties:
  *
  *                 responseCode:
@@ -96,71 +165,59 @@ router.get(
  *
  *                 message:
  *                   type: string
- *                   example: User rides fetched successfully
+ *                   example: Routes calculated successfully
  *
  *                 data:
  *                   type: array
+ *
  *                   items:
  *                     type: object
+ *
  *                     properties:
  *
- *                       id:
+ *                       route_index:
  *                         type: integer
- *                         example: 1
+ *                         example: 0
  *
- *                       user_id:
- *                         type: string
- *                         example: U0001
- *
- *                       pickup_city:
- *                         type: string
- *                         example: Ghaziabad
- *
- *                       pickup_state:
- *                         type: string
- *                         example: Uttar Pradesh
- *
- *                       drop_city:
- *                         type: string
- *                         example: Dehradun
- *
- *                       drop_state:
- *                         type: string
- *                         example: Uttarakhand
- *
- *                       travel_date:
- *                         type: string
- *                         format: date
- *                         example: "2026-08-30"
- *
- *                       departure_time:
- *                         type: string
- *                         example: "09:30:00"
- *
- *                       available_weight:
+ *                       distance_km:
  *                         type: number
- *                         example: 5
+ *                         format: double
+ *                         example: 285.10
  *
- *                       status:
- *                         type: string
- *                         example: active
+ *                       duration_minutes:
+ *                         type: integer
+ *                         example: 305
  *
- *                       notes:
+ *                       polyline:
  *                         type: string
- *                         example: Travelling by car
+ *                         nullable: true
+ *                         example: "encoded_polyline_here"
+ *
+ *                       description:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "Delhi to Jaipur"
+ *
+ *       400:
+ *         description: Invalid request or route calculation failed
+ *
+ *       401:
+ *         description: Unauthorized
+ *
+ *       500:
+ *         description: Internal server error
  */
-router.get(
-  "/user/:userId",
-  rideController.getUserRides
+router.post(
+  "/calculate-routes",
+  rideController.calculateRoutes
 );
-
 
 /**
  * @swagger
  * /api/rides:
  *   post:
  *     summary: Create a new journey
- *     description: Creates a new ride or journey.
+ *     description: Creates a new ride or journey with pickup/drop coordinates and selected route information.
  *     tags:
  *       - Rides
  *
@@ -176,16 +233,24 @@ router.get(
  *               - user_id
  *               - pickup_city
  *               - drop_city
+ *               - pickup_latitude
+ *               - pickup_longitude
+ *               - drop_latitude
+ *               - drop_longitude
  *               - travel_date
  *               - departure_time
  *               - available_weight
+ *               - price_per_kg
+ *               - route_index
+ *               - route_distance_km
+ *               - route_duration_minutes
+ *               - route_polyline
  *
  *             properties:
  *
  *               user_id:
  *                 type: string
  *                 example: U0001
- *                 description: ID of the user creating the journey
  *
  *               pickup_city:
  *                 type: string
@@ -195,6 +260,16 @@ router.get(
  *                 type: string
  *                 example: Uttar Pradesh
  *
+ *               pickup_latitude:
+ *                 type: number
+ *                 format: double
+ *                 example: 28.6692
+ *
+ *               pickup_longitude:
+ *                 type: number
+ *                 format: double
+ *                 example: 77.4538
+ *
  *               drop_city:
  *                 type: string
  *                 example: Dehradun
@@ -203,10 +278,20 @@ router.get(
  *                 type: string
  *                 example: Uttarakhand
  *
+ *               drop_latitude:
+ *                 type: number
+ *                 format: double
+ *                 example: 30.3165
+ *
+ *               drop_longitude:
+ *                 type: number
+ *                 format: double
+ *                 example: 78.0322
+ *
  *               travel_date:
  *                 type: string
  *                 format: date
- *                 example: "2026-08-30"
+ *                 example: "2026-09-30"
  *
  *               departure_time:
  *                 type: string
@@ -214,21 +299,45 @@ router.get(
  *
  *               available_weight:
  *                 type: number
- *                 example: 5
+ *                 example: 10
+ *
+ *               price_per_kg:
+ *                 type: number
+ *                 example: 80
+ *
+ *               route_index:
+ *                 type: integer
+ *                 example: 0
+ *
+ *               route_distance_km:
+ *                 type: number
+ *                 format: double
+ *                 example: 285.10
+ *
+ *               route_duration_minutes:
+ *                 type: integer
+ *                 example: 305
+ *
+ *               route_polyline:
+ *                 type: string
+ *                 example: "encoded_polyline_here"
  *
  *               notes:
  *                 type: string
  *                 maxLength: 500
- *                 example: Travelling by car and can carry small to medium parcels.
+ *                 example: Travelling by car.
  *
  *     responses:
+ *
  *       201:
  *         description: Journey created successfully
+ *
+ *       400:
+ *         description: Invalid journey data
  */
 router.post(
   "/",
   rideController.createRide
 );
-
 
 module.exports = router;
