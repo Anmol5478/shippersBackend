@@ -88,21 +88,6 @@ const calculateRoutes = async (pickup, drop) => {
       traffic_metadata: true,
     };
 
-    console.log(
-      "Calling Ola Maps:",
-      OLA_DIRECTIONS_URL
-    );
-
-    console.log(
-      "Ola Maps params:",
-      {
-        origin: params.origin,
-        destination: params.destination,
-        overview: params.overview,
-        alternatives: params.alternatives,
-        traffic_metadata: params.traffic_metadata,
-      }
-    );
 
     // IMPORTANT:
     // The working Postman request uses POST
@@ -122,11 +107,6 @@ const calculateRoutes = async (pickup, drop) => {
 
     const data = response?.data;
 
-    console.log(
-      "Ola Maps Directions Response:",
-      JSON.stringify(data, null, 2)
-    );
-
     // -----------------------------------------
     // Normalize Ola response
     // -----------------------------------------
@@ -141,32 +121,7 @@ const calculateRoutes = async (pickup, drop) => {
 
     return routes;
   } catch (error) {
-    console.error(
-      "========== OLA MAPS ERROR =========="
-    );
 
-    console.error(
-      "Message:",
-      error?.message
-    );
-
-    console.error(
-      "Status:",
-      error?.response?.status
-    );
-
-    console.error(
-      "Response:",
-      JSON.stringify(
-        error?.response?.data,
-        null,
-        2
-      )
-    );
-
-    console.error(
-      "===================================="
-    );
 
     const olaMessage =
       error?.response?.data?.message ||
@@ -196,70 +151,65 @@ const calculateRoutes = async (pickup, drop) => {
  *   end_location
  */
 const normalizeOlaRoutes = (data) => {
-  const olaRoutes = data?.routes || [];
 
-  if (!Array.isArray(olaRoutes)) {
+  const olaRoutes = Array.isArray(data?.routes)
+    ? data.routes
+    : [];
+
+
+
+  if (!olaRoutes.length) {
     return [];
   }
 
-  return olaRoutes
-    .map((route, index) => {
-      const distanceMeters = Number(
-        route.distance || 0
-      );
+  return olaRoutes.map((route, index) => {
+    const distanceMeters = Number(route?.distance || 0);
 
-      const durationSeconds = Number(
-        route.duration || 0
-      );
+    const durationSeconds = Number(route?.duration || 0);
 
-      return {
-        route_index: index,
 
-        distance_km: Number(
-          (distanceMeters / 1000).toFixed(2)
-        ),
+    return {
+      route_index: index,
 
-        duration_minutes: Math.ceil(
-          durationSeconds / 60
-        ),
+      distance_km: Number(
+        (distanceMeters / 1000).toFixed(2)
+      ),
 
-        polyline:
-          route.overview_polyline || null,
+      duration_minutes: Math.ceil(
+        durationSeconds / 60
+      ),
 
-        description:
-          route.summary || null,
+      polyline:
+        route?.overview_polyline || null,
 
-        start_location:
-          route.start_location
-            ? {
-                latitude: Number(
-                  route.start_location.lat
-                ),
-                longitude: Number(
-                  route.start_location.lng
-                ),
-              }
-            : null,
+      description:
+        route?.summary || "",
 
-        end_location:
-          route.end_location
-            ? {
-                latitude: Number(
-                  route.end_location.lat
-                ),
-                longitude: Number(
-                  route.end_location.lng
-                ),
-              }
-            : null,
-      };
-    })
-    .filter(
-      (route) =>
-        route.distance_km > 0 &&
-        route.duration_minutes > 0 &&
-        route.polyline
-    );
+      start_location:
+        route?.legs?.[0]?.start_location
+          ? {
+              latitude: Number(
+                route.legs[0].start_location.lat
+              ),
+              longitude: Number(
+                route.legs[0].start_location.lng
+              ),
+            }
+          : null,
+
+      end_location:
+        route?.legs?.[0]?.end_location
+          ? {
+              latitude: Number(
+                route.legs[0].end_location.lat
+              ),
+              longitude: Number(
+                route.legs[0].end_location.lng
+              ),
+            }
+          : null,
+    };
+  });
 };
 
 module.exports = {
