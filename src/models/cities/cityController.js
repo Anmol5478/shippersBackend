@@ -8,7 +8,9 @@ exports.searchCities = async (req, res) => {
       SELECT
         id,
         city_name,
-        state
+        state,
+        latitude,
+        longitude
       FROM cities
       WHERE 1 = 1
     `;
@@ -17,7 +19,7 @@ exports.searchCities = async (req, res) => {
 
     if (search) {
       query += ` AND LOWER(city_name) LIKE LOWER(?)`;
-params.push(`${search}%`);
+      params.push(`${search}%`);
     }
 
     query += `
