@@ -1,7 +1,7 @@
 const db = require("../../config/db");
 
 /**
- * Search available active rides with traveller details
+ * Search available active rides
  */
 const searchRides = async ({
   from,
@@ -17,6 +17,9 @@ const searchRides = async ({
 
       users.full_name AS traveller_name,
       users.phone AS traveller_phone,
+
+      rides.transport_type,
+      rides.transport_mode,
 
       rides.pickup_city,
       rides.pickup_state,
@@ -55,10 +58,6 @@ const searchRides = async ({
 
   const params = [];
 
-  // =========================
-  // FROM CITY
-  // =========================
-
   if (from) {
     query += `
       AND LOWER(rides.pickup_city) = LOWER(?)
@@ -66,10 +65,6 @@ const searchRides = async ({
 
     params.push(from);
   }
-
-  // =========================
-  // TO CITY
-  // =========================
 
   if (to) {
     query += `
@@ -79,10 +74,6 @@ const searchRides = async ({
     params.push(to);
   }
 
-  // =========================
-  // TRAVEL DATE
-  // =========================
-
   if (date) {
     query += `
       AND rides.travel_date = ?
@@ -90,10 +81,6 @@ const searchRides = async ({
 
     params.push(date);
   }
-
-  // =========================
-  // WEIGHT RANGE
-  // =========================
 
   if (
     minWeight !== null &&
@@ -107,23 +94,13 @@ const searchRides = async ({
       minWeight,
       maxWeight
     );
-  }
-
-  // =========================
-  // MINIMUM WEIGHT
-  // =========================
-
-  else if (minWeight !== null) {
+  } else if (minWeight !== null) {
     query += `
       AND rides.available_weight >= ?
     `;
 
     params.push(minWeight);
   }
-
-  // =========================
-  // SORTING
-  // =========================
 
   query += `
     ORDER BY
@@ -140,48 +117,51 @@ const searchRides = async ({
 };
 
 /**
- * Get all rides published by a specific user
+ * Get rides published by a user
  */
 const getUserRides = async (user_id) => {
   const query = `
     SELECT
-      id,
-      user_id,
+      rides.id,
+      rides.user_id,
 
-      pickup_city,
-      pickup_state,
-      pickup_latitude,
-      pickup_longitude,
+      rides.transport_type,
+      rides.transport_mode,
 
-      drop_city,
-      drop_state,
-      drop_latitude,
-      drop_longitude,
+      rides.pickup_city,
+      rides.pickup_state,
+      rides.pickup_latitude,
+      rides.pickup_longitude,
 
-      travel_date,
-      departure_time,
+      rides.drop_city,
+      rides.drop_state,
+      rides.drop_latitude,
+      rides.drop_longitude,
 
-      available_weight,
-      price_per_kg,
+      rides.travel_date,
+      rides.departure_time,
 
-      route_index,
-      route_distance_km,
-      route_duration_minutes,
-      route_polyline,
+      rides.available_weight,
+      rides.price_per_kg,
 
-      status,
-      notes,
+      rides.route_index,
+      rides.route_distance_km,
+      rides.route_duration_minutes,
+      rides.route_polyline,
 
-      created_at,
-      updated_at
+      rides.status,
+      rides.notes,
+
+      rides.created_at,
+      rides.updated_at
 
     FROM rides
 
-    WHERE user_id = ?
+    WHERE rides.user_id = ?
 
     ORDER BY
-      travel_date DESC,
-      departure_time DESC
+      rides.travel_date DESC,
+      rides.departure_time DESC
   `;
 
   const [rows] = await db.query(
@@ -193,138 +173,222 @@ const getUserRides = async (user_id) => {
 };
 
 /**
- * Create a new ride
+ * Create ride + travel proof atomically.
  */
-const createRide = async ({
-  user_id,
-
-  pickup_city,
-  pickup_state,
-  pickup_latitude,
-  pickup_longitude,
-
-  drop_city,
-  drop_state,
-  drop_latitude,
-  drop_longitude,
-
-  travel_date,
-  departure_time,
-
-  available_weight,
-  price_per_kg,
-
-  route_index,
-  route_distance_km,
-  route_duration_minutes,
-  route_polyline,
-
-  notes,
+const createRideWithProof = async ({
+  ride,
+  proof,
 }) => {
+  const connection =
+    await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const rideQuery = `
+      INSERT INTO rides (
+        user_id,
+
+        transport_type,
+        transport_mode,
+
+        pickup_city,
+        pickup_state,
+        pickup_latitude,
+        pickup_longitude,
+
+        drop_city,
+        drop_state,
+        drop_latitude,
+        drop_longitude,
+
+        travel_date,
+        departure_time,
+
+        available_weight,
+        price_per_kg,
+
+        route_index,
+        route_distance_km,
+        route_duration_minutes,
+        route_polyline,
+
+        notes
+      )
+
+      VALUES (
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?,
+        ?, ?,
+        ?, ?, ?, ?,
+        ?
+      )
+    `;
+
+    const rideParams = [
+      ride.user_id,
+
+      ride.transport_type,
+      ride.transport_mode,
+
+      ride.pickup_city,
+      ride.pickup_state,
+      ride.pickup_latitude,
+      ride.pickup_longitude,
+
+      ride.drop_city,
+      ride.drop_state,
+      ride.drop_latitude,
+      ride.drop_longitude,
+
+      ride.travel_date,
+      ride.departure_time,
+
+      ride.available_weight,
+      ride.price_per_kg,
+
+      ride.route_index,
+      ride.route_distance_km,
+      ride.route_duration_minutes,
+      ride.route_polyline,
+
+      ride.notes,
+    ];
+
+    const [
+      rideResult,
+    ] = await connection.execute(
+      rideQuery,
+      rideParams
+    );
+
+    const rideId =
+      rideResult.insertId;
+
+    const proofQuery = `
+      INSERT INTO ride_travel_proof (
+        ride_id,
+
+        ticket_document_key,
+        pnr_number,
+
+        vehicle_number,
+        vehicle_photo_key,
+        dl_document_key,
+        rc_document_key,
+
+        verification_status
+      )
+
+      VALUES (
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        'PENDING'
+      )
+    `;
+
+    const proofParams = [
+      rideId,
+
+      proof.ticket_document_key || null,
+      proof.pnr_number || null,
+
+      proof.vehicle_number || null,
+      proof.vehicle_photo_key || null,
+      proof.dl_document_key || null,
+      proof.rc_document_key || null,
+    ];
+
+    await connection.execute(
+      proofQuery,
+      proofParams
+    );
+
+    await connection.commit();
+
+    return {
+      id: rideId,
+
+      ...ride,
+
+      status: "active",
+
+      proof: {
+        ticket_document_key:
+          proof.ticket_document_key || null,
+
+        pnr_number:
+          proof.pnr_number || null,
+
+        vehicle_number:
+          proof.vehicle_number || null,
+
+        vehicle_photo_key:
+          proof.vehicle_photo_key || null,
+
+        dl_document_key:
+          proof.dl_document_key || null,
+
+        rc_document_key:
+          proof.rc_document_key || null,
+
+        verification_status:
+          "PENDING",
+      },
+    };
+  } catch (error) {
+    await connection.rollback();
+
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Get ride proof.
+ */
+const getRideProof = async (rideId) => {
   const query = `
-    INSERT INTO rides (
-      user_id,
+    SELECT
+      id,
+      ride_id,
 
-      pickup_city,
-      pickup_state,
-      pickup_latitude,
-      pickup_longitude,
+      ticket_document_key,
+      pnr_number,
 
-      drop_city,
-      drop_state,
-      drop_latitude,
-      drop_longitude,
+      vehicle_number,
+      vehicle_photo_key,
+      dl_document_key,
+      rc_document_key,
 
-      travel_date,
-      departure_time,
+      verification_status,
+      rejection_reason,
+      verified_by,
 
-      available_weight,
-      price_per_kg,
+      created_at,
+      updated_at
 
-      route_index,
-      route_distance_km,
-      route_duration_minutes,
-      route_polyline,
+    FROM ride_travel_proof
 
-      notes
-    )
+    WHERE ride_id = ?
 
-    VALUES (
-      ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?,
-      ?, ?,
-      ?, ?, ?, ?,
-      ?
-    )
+    LIMIT 1
   `;
 
-  const params = [
-    user_id,
-
-    pickup_city,
-    pickup_state,
-    pickup_latitude,
-    pickup_longitude,
-
-    drop_city,
-    drop_state,
-    drop_latitude,
-    drop_longitude,
-
-    travel_date,
-    departure_time,
-
-    available_weight,
-    price_per_kg,
-
-    route_index,
-    route_distance_km,
-    route_duration_minutes,
-    route_polyline,
-
-    notes,
-  ];
-
-  const [result] = await db.query(
+  const [rows] = await db.query(
     query,
-    params
+    [rideId]
   );
 
-  return {
-    id: result.insertId,
-
-    user_id,
-
-    pickup_city,
-    pickup_state,
-    pickup_latitude,
-    pickup_longitude,
-
-    drop_city,
-    drop_state,
-    drop_latitude,
-    drop_longitude,
-
-    travel_date,
-    departure_time,
-
-    available_weight,
-    price_per_kg,
-
-    route_index,
-    route_distance_km,
-    route_duration_minutes,
-    route_polyline,
-
-    status: "active",
-
-    notes,
-  };
+  return rows[0] || null;
 };
 
 module.exports = {
   searchRides,
   getUserRides,
-  createRide,
+  createRideWithProof,
+  getRideProof,
 };

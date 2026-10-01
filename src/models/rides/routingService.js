@@ -162,44 +162,54 @@ const normalizeOlaRoutes = (data) => {
     return [];
   }
 
-return olaRoutes.map((route, index) => {
-  const legs = Array.isArray(route?.legs) ? route.legs : [];
+  return olaRoutes.map((route, index) => {
+    const distanceMeters = Number(route?.distance || 0);
 
-  const distanceMeters = legs.reduce(
-    (sum, leg) => sum + Number(leg?.distance || 0),
-    0
-  );
+    const durationSeconds = Number(route?.duration || 0);
 
-  const durationSeconds = legs.reduce(
-    (sum, leg) => sum + Number(leg?.duration || 0),
-    0
-  );
 
-  return {
-    route_index: index,
+    return {
+      route_index: index,
 
-    distance_km: Number((distanceMeters / 1000).toFixed(2)),
-    duration_minutes: Math.ceil(durationSeconds / 60),
+      distance_km: Number(
+        (distanceMeters / 1000).toFixed(2)
+      ),
 
-    polyline: route?.overview_polyline || null,
-    description: route?.summary || "",
+      duration_minutes: Math.ceil(
+        durationSeconds / 60
+      ),
 
-    start_location: legs[0]?.start_location
-      ? {
-          latitude: Number(legs[0].start_location.lat),
-          longitude: Number(legs[0].start_location.lng),
-        }
-      : null,
+      polyline:
+        route?.overview_polyline || null,
 
-    end_location: legs[0]?.end_location
-      ? {
-          latitude: Number(legs[0].end_location.lat),
-          longitude: Number(legs[0].end_location.lng),
-        }
-      : null,
-  };
-});
+      description:
+        route?.summary || "",
 
+      start_location:
+        route?.legs?.[0]?.start_location
+          ? {
+              latitude: Number(
+                route.legs[0].start_location.lat
+              ),
+              longitude: Number(
+                route.legs[0].start_location.lng
+              ),
+            }
+          : null,
+
+      end_location:
+        route?.legs?.[0]?.end_location
+          ? {
+              latitude: Number(
+                route.legs[0].end_location.lat
+              ),
+              longitude: Number(
+                route.legs[0].end_location.lng
+              ),
+            }
+          : null,
+    };
+  });
 };
 
 module.exports = {
