@@ -1,5 +1,35 @@
+const sharp = require("sharp");
+
 const rideRepository = require("./rideRepository");
 const routingService = require("./routingService");
+
+const {
+  uploadToR2,
+  deleteFromR2,
+} = require("./rideProofStorage");
+
+const ALLOWED_TRANSPORT_TYPES = [
+  "PUBLIC_TRANSPORT",
+  "PRIVATE_VEHICLE",
+];
+
+const ALLOWED_PUBLIC_MODES = [
+  "TRAIN",
+  "BUS",
+  "FLIGHT",
+];
+
+const ALLOWED_PRIVATE_MODES = [
+  "CAR",
+  "BIKE",
+  "OTHER",
+];
+
+const ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
 
 /**
  * Search available rides
@@ -21,10 +51,6 @@ const searchRides = async (query) => {
   let minWeight = null;
   let maxWeight = null;
 
-  // =========================
-  // WEIGHT FILTER
-  // =========================
-
   if (weight) {
     if (weight.includes("-")) {
       const parts = weight.split("-");
@@ -33,8 +59,8 @@ const searchRides = async (query) => {
       maxWeight = Number(parts[1]);
 
       if (
-        Number.isNaN(minWeight) ||
-        Number.isNaN(maxWeight) ||
+        !Number.isFinite(minWeight) ||
+        !Number.isFinite(maxWeight) ||
         minWeight < 0 ||
         maxWeight <= minWeight
       ) {
@@ -48,7 +74,7 @@ const searchRides = async (query) => {
       );
 
       if (
-        Number.isNaN(minWeight) ||
+        !Number.isFinite(minWeight) ||
         minWeight < 0
       ) {
         throw new Error(
@@ -62,7 +88,7 @@ const searchRides = async (query) => {
     }
   }
 
-  return await rideRepository.searchRides({
+  return rideRepository.searchRides({
     from: from.trim(),
     to: to.trim(),
     minWeight,
@@ -72,29 +98,156 @@ const searchRides = async (query) => {
 };
 
 /**
- * Get all rides published by a user
+ * Get rides published by user.
  */
-const getUserRides = async (user_id) => {
+const getUserRides = async (userId) => {
   if (
-    !user_id ||
-    !user_id.trim()
+    !userId ||
+    !String(userId).trim()
   ) {
     throw new Error(
       "User ID is required"
     );
   }
 
-  return await rideRepository.getUserRides(
-    user_id.trim()
+  return rideRepository.getUserRides(
+    String(userId).trim()
   );
 };
 
 /**
- * Create a new ride
+ * Convert uploaded image to WebP.
  */
-const createRide = async (data) => {
+const processImage = async (file) => {
+  if (!file) {
+    return null;
+  }
+
+  if (
+    !ALLOWED_MIME_TYPES.includes(
+      file.mimetype
+    )
+  ) {
+    throw new Error(
+      "Only JPG, PNG and WEBP images are allowed"
+    );
+  }
+
+  if (
+    file.size > 10 * 1024 * 1024
+  ) {
+    throw new Error(
+      "Uploaded file must not exceed 10MB"
+    );
+  }
+
+  return sharp(file.buffer)
+    .rotate()
+    .webp({
+      quality: 85,
+    })
+    .toBuffer();
+};
+
+/**
+ * Upload proof document.
+ */
+const uploadProofDocument = async ({
+  file,
+  rideId,
+  documentType,
+}) => {
+  if (!file) {
+    return null;
+  }
+
+  const buffer =
+    await processImage(file);
+
+  return uploadToR2({
+    buffer,
+    rideId,
+    documentType,
+  });
+};
+
+/**
+ * Validate public/private proof.
+ */
+const validateProof = ({
+  transportType,
+  pnrNumber,
+  ticketFile,
+  vehicleNumber,
+  dlFile,
+  rcFile,
+}) => {
+  if (
+    transportType ===
+    "PUBLIC_TRANSPORT"
+  ) {
+    const hasTicket =
+      !!ticketFile;
+
+    const hasPnr =
+      !!pnrNumber &&
+      String(pnrNumber).trim();
+
+    if (!hasTicket && !hasPnr) {
+      throw new Error(
+        "Public transport requires a ticket or PNR"
+      );
+    }
+
+    if (hasPnr && String(pnrNumber).length > 100) {
+      throw new Error(
+        "PNR number cannot exceed 100 characters"
+      );
+    }
+
+    return;
+  }
+
+  if (
+    transportType ===
+    "PRIVATE_VEHICLE"
+  ) {
+    if (
+      !vehicleNumber ||
+      !String(vehicleNumber).trim()
+    ) {
+      throw new Error(
+        "Vehicle number is required"
+      );
+    }
+
+    if (!dlFile) {
+      throw new Error(
+        "Driving Licence is required"
+      );
+    }
+
+    if (!rcFile) {
+      throw new Error(
+        "RC document is required"
+      );
+    }
+
+    return;
+  }
+};
+
+/**
+ * Create and publish ride.
+ */
+const createRide = async ({
+  userId,
+  body,
+  files,
+}) => {
   const {
-    user_id,
+    transport_type,
+    transport_mode,
 
     pickup_city,
     pickup_state,
@@ -118,21 +271,78 @@ const createRide = async (data) => {
     route_polyline,
 
     notes,
-  } = data;
 
-  // =========================
-  // REQUIRED FIELD VALIDATION
-  // =========================
+    pnr_number,
+    vehicle_number,
+  } = body;
 
-  if (!user_id) {
+  // =========================================
+  // USER
+  // =========================================
+
+  if (!userId) {
     throw new Error(
-      "User ID is required"
+      "Authenticated user is required"
+    );
+  }
+
+  // =========================================
+  // TRANSPORT
+  // =========================================
+
+  if (
+    !ALLOWED_TRANSPORT_TYPES.includes(
+      transport_type
+    )
+  ) {
+    throw new Error(
+      "Invalid transport type"
+    );
+  }
+
+  if (!transport_mode) {
+    throw new Error(
+      "Transport mode is required"
     );
   }
 
   if (
+    transport_type ===
+    "PUBLIC_TRANSPORT"
+  ) {
+    if (
+      !ALLOWED_PUBLIC_MODES.includes(
+        transport_mode
+      )
+    ) {
+      throw new Error(
+        "Invalid public transport mode"
+      );
+    }
+  }
+
+  if (
+    transport_type ===
+    "PRIVATE_VEHICLE"
+  ) {
+    if (
+      !ALLOWED_PRIVATE_MODES.includes(
+        transport_mode
+      )
+    ) {
+      throw new Error(
+        "Invalid private vehicle mode"
+      );
+    }
+  }
+
+  // =========================================
+  // PICKUP / DROP
+  // =========================================
+
+  if (
     !pickup_city ||
-    !pickup_city.trim()
+    !String(pickup_city).trim()
   ) {
     throw new Error(
       "Pickup city is required"
@@ -141,12 +351,29 @@ const createRide = async (data) => {
 
   if (
     !drop_city ||
-    !drop_city.trim()
+    !String(drop_city).trim()
   ) {
     throw new Error(
       "Drop city is required"
     );
   }
+
+  if (
+    String(pickup_city)
+      .trim()
+      .toLowerCase() ===
+    String(drop_city)
+      .trim()
+      .toLowerCase()
+  ) {
+    throw new Error(
+      "Pickup and drop city cannot be the same"
+    );
+  }
+
+  // =========================================
+  // DATE / TIME
+  // =========================================
 
   if (!travel_date) {
     throw new Error(
@@ -160,19 +387,9 @@ const createRide = async (data) => {
     );
   }
 
-  if (
-    available_weight === undefined ||
-    available_weight === null ||
-    available_weight === ""
-  ) {
-    throw new Error(
-      "Available weight is required"
-    );
-  }
-
-  // =========================
+  // =========================================
   // COORDINATES
-  // =========================
+  // =========================================
 
   const pickupLat =
     Number(pickup_latitude);
@@ -212,43 +429,38 @@ const createRide = async (data) => {
 
   if (
     pickupLat < -90 ||
-    pickupLat > 90
+    pickupLat > 90 ||
+    dropLat < -90 ||
+    dropLat > 90
   ) {
     throw new Error(
-      "Invalid pickup latitude"
+      "Invalid latitude"
     );
   }
 
   if (
     pickupLng < -180 ||
-    pickupLng > 180
-  ) {
-    throw new Error(
-      "Invalid pickup longitude"
-    );
-  }
-
-  if (
-    dropLat < -90 ||
-    dropLat > 90
-  ) {
-    throw new Error(
-      "Invalid drop latitude"
-    );
-  }
-
-  if (
+    pickupLng > 180 ||
     dropLng < -180 ||
     dropLng > 180
   ) {
     throw new Error(
-      "Invalid drop longitude"
+      "Invalid longitude"
     );
   }
 
-  // =========================
+  if (
+    pickupLat === dropLat &&
+    pickupLng === dropLng
+  ) {
+    throw new Error(
+      "Pickup and drop locations cannot be the same"
+    );
+  }
+
+  // =========================================
   // WEIGHT
-  // =========================
+  // =========================================
 
   const weight =
     Number(available_weight);
@@ -262,9 +474,9 @@ const createRide = async (data) => {
     );
   }
 
-  // =========================
+  // =========================================
   // PRICE
-  // =========================
+  // =========================================
 
   const price =
     Number(price_per_kg);
@@ -278,35 +490,9 @@ const createRide = async (data) => {
     );
   }
 
-  // =========================
-  // PICKUP / DROP
-  // =========================
-
-  if (
-    pickup_city
-      .trim()
-      .toLowerCase() ===
-    drop_city
-      .trim()
-      .toLowerCase()
-  ) {
-    throw new Error(
-      "Pickup and drop city cannot be the same"
-    );
-  }
-
-  if (
-    pickupLat === dropLat &&
-    pickupLng === dropLng
-  ) {
-    throw new Error(
-      "Pickup and drop locations cannot be the same"
-    );
-  }
-
-  // =========================
-  // ROUTE VALIDATION
-  // =========================
+  // =========================================
+  // ROUTE
+  // =========================================
 
   const routeIndex =
     Number(route_index);
@@ -353,62 +539,219 @@ const createRide = async (data) => {
     );
   }
 
-  // =========================
+  // =========================================
   // NOTES
-  // =========================
+  // =========================================
 
   if (
     notes &&
-    notes.length > 500
+    String(notes).length > 500
   ) {
     throw new Error(
       "Notes cannot exceed 500 characters"
     );
   }
 
-  // =========================
-  // CREATE RIDE
-  // =========================
+  // =========================================
+  // FILES
+  // =========================================
 
-  return await rideRepository.createRide({
-    user_id: user_id.trim(),
+  const ticketFile =
+    files?.ticket?.[0] || null;
 
-    pickup_city:
-      pickup_city.trim(),
+  const vehiclePhotoFile =
+    files?.vehicle_photo?.[0] || null;
 
-    pickup_state:
-      pickup_state?.trim() || null,
+  const dlFile =
+    files?.dl?.[0] || null;
 
-    pickup_latitude: pickupLat,
-    pickup_longitude: pickupLng,
+  const rcFile =
+    files?.rc?.[0] || null;
 
-    drop_city:
-      drop_city.trim(),
+  // =========================================
+  // PROOF VALIDATION
+  // =========================================
 
-    drop_state:
-      drop_state?.trim() || null,
+  validateProof({
+    transportType: transport_type,
+    pnrNumber: pnr_number,
+    ticketFile,
 
-    drop_latitude: dropLat,
-    drop_longitude: dropLng,
-
-    travel_date,
-    departure_time,
-
-    available_weight: weight,
-    price_per_kg: price,
-
-    route_index: routeIndex,
-    route_distance_km: routeDistance,
-    route_duration_minutes: routeDuration,
-    route_polyline,
-
-    notes:
-      notes?.trim() || null,
+    vehicleNumber,
+    dlFile,
+    rcFile,
   });
+
+  // =========================================
+  // UPLOAD DOCUMENTS
+  // =========================================
+
+  /*
+   * We don't have a ride ID yet.
+   *
+   * Use a temporary folder first.
+   * After the DB ride is created, the
+   * keys are already valid and stored.
+   */
+  const temporaryRideId =
+    `temp-${userId}-${Date.now()}`;
+
+  const uploadedKeys = [];
+
+  try {
+    let ticketKey = null;
+    let vehiclePhotoKey = null;
+    let dlKey = null;
+    let rcKey = null;
+
+    if (ticketFile) {
+      ticketKey =
+        await uploadProofDocument({
+          file: ticketFile,
+          rideId: temporaryRideId,
+          documentType: "ticket",
+        });
+
+      uploadedKeys.push(ticketKey);
+    }
+
+    if (vehiclePhotoFile) {
+      vehiclePhotoKey =
+        await uploadProofDocument({
+          file: vehiclePhotoFile,
+          rideId: temporaryRideId,
+          documentType: "vehicle",
+        });
+
+      uploadedKeys.push(
+        vehiclePhotoKey
+      );
+    }
+
+    if (dlFile) {
+      dlKey =
+        await uploadProofDocument({
+          file: dlFile,
+          rideId: temporaryRideId,
+          documentType: "dl",
+        });
+
+      uploadedKeys.push(dlKey);
+    }
+
+    if (rcFile) {
+      rcKey =
+        await uploadProofDocument({
+          file: rcFile,
+          rideId: temporaryRideId,
+          documentType: "rc",
+        });
+
+      uploadedKeys.push(rcKey);
+    }
+
+    // =========================================
+    // CREATE DATABASE RECORDS
+    // =========================================
+
+    const ride =
+      await rideRepository.createRideWithProof({
+        ride: {
+          user_id: String(userId).trim(),
+
+          transport_type,
+          transport_mode,
+
+          pickup_city:
+            String(pickup_city).trim(),
+
+          pickup_state:
+            pickup_state
+              ? String(pickup_state).trim()
+              : null,
+
+          pickup_latitude: pickupLat,
+          pickup_longitude: pickupLng,
+
+          drop_city:
+            String(drop_city).trim(),
+
+          drop_state:
+            drop_state
+              ? String(drop_state).trim()
+              : null,
+
+          drop_latitude: dropLat,
+          drop_longitude: dropLng,
+
+          travel_date,
+          departure_time,
+
+          available_weight: weight,
+          price_per_kg: price,
+
+          route_index: routeIndex,
+          route_distance_km: routeDistance,
+          route_duration_minutes:
+            routeDuration,
+          route_polyline,
+
+          notes:
+            notes
+              ? String(notes).trim()
+              : null,
+        },
+
+        proof: {
+          ticket_document_key:
+            ticketKey,
+
+          pnr_number:
+            pnr_number
+              ? String(pnr_number).trim()
+              : null,
+
+          vehicle_number:
+            vehicle_number
+              ? String(vehicle_number).trim()
+              : null,
+
+          vehicle_photo_key:
+            vehiclePhotoKey,
+
+          dl_document_key:
+            dlKey,
+
+          rc_document_key:
+            rcKey,
+        },
+      });
+
+    return ride;
+  } catch (error) {
+    // =========================================
+    // CLEAN UP R2 IF DATABASE FAILS
+    // =========================================
+
+    await Promise.all(
+      uploadedKeys.map((key) =>
+        deleteFromR2(key).catch(
+          (deleteError) => {
+            console.error(
+              "R2 cleanup failed:",
+              deleteError
+            );
+          }
+        )
+      )
+    );
+
+    throw error;
+  }
 };
 
 /**
- * Calculate alternative routes
+ * Calculate alternative routes.
  */
 const calculateRoutes = async (data) => {
   const {
@@ -440,35 +783,16 @@ const calculateRoutes = async (data) => {
   const dropLongitude =
     Number(drop.longitude);
 
-  // =========================
-  // PICKUP COORDINATES
-  // =========================
-
   if (
     !Number.isFinite(pickupLatitude) ||
-    !Number.isFinite(pickupLongitude)
-  ) {
-    throw new Error(
-      "Invalid pickup coordinates"
-    );
-  }
-
-  // =========================
-  // DROP COORDINATES
-  // =========================
-
-  if (
+    !Number.isFinite(pickupLongitude) ||
     !Number.isFinite(dropLatitude) ||
     !Number.isFinite(dropLongitude)
   ) {
     throw new Error(
-      "Invalid drop coordinates"
+      "Invalid pickup or drop coordinates"
     );
   }
-
-  // =========================
-  // RANGE VALIDATION
-  // =========================
 
   if (
     pickupLatitude < -90 ||
@@ -492,10 +816,6 @@ const calculateRoutes = async (data) => {
     );
   }
 
-  // =========================
-  // SAME LOCATION
-  // =========================
-
   if (
     pickupLatitude === dropLatitude &&
     pickupLongitude === dropLongitude
@@ -505,11 +825,7 @@ const calculateRoutes = async (data) => {
     );
   }
 
-  // =========================
-  // CALL OLA MAPS
-  // =========================
-
-  return await routingService.calculateRoutes(
+  return routingService.calculateRoutes(
     {
       latitude: pickupLatitude,
       longitude: pickupLongitude,

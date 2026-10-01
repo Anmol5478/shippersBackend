@@ -1,9 +1,21 @@
 const express = require("express");
+const multer = require("multer");
 
 const router = express.Router();
 
 const rideController =
   require("./rideController");
+
+const authenticate =
+  require("../../middleware/authenticate");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
 
 /**
  * @swagger
@@ -209,6 +221,7 @@ router.get(
  */
 router.post(
   "/calculate-routes",
+  authenticate,
   rideController.calculateRoutes
 );
 
@@ -337,6 +350,27 @@ router.post(
  */
 router.post(
   "/",
+  authenticate,
+
+  upload.fields([
+    {
+      name: "ticket",
+      maxCount: 1,
+    },
+    {
+      name: "vehicle_photo",
+      maxCount: 1,
+    },
+    {
+      name: "dl",
+      maxCount: 1,
+    },
+    {
+      name: "rc",
+      maxCount: 1,
+    },
+  ]),
+
   rideController.createRide
 );
 

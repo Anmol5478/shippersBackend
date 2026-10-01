@@ -1,7 +1,7 @@
 const rideService = require("./rideService");
 
 /**
- * Search available rides
+ * Search available rides.
  */
 exports.searchRides = async (
   req,
@@ -39,7 +39,7 @@ exports.searchRides = async (
 };
 
 /**
- * Get rides published by a specific user
+ * Get rides published by a user.
  */
 exports.getUserRides = async (
   req,
@@ -81,23 +81,46 @@ exports.getUserRides = async (
 };
 
 /**
- * Create a new ride
+ * Create / publish a ride.
  */
 exports.createRide = async (
   req,
   res
 ) => {
   try {
+    /*
+     * IMPORTANT:
+     * user_id comes from JWT.
+     *
+     * Never trust user_id sent by
+     * the mobile application.
+     */
+    const userId =
+      req.user?.user_id;
+
+    if (!userId) {
+      return res.status(401).json({
+        responseCode: "01",
+        success: false,
+        message:
+          "Authenticated user ID not found",
+      });
+    }
+
     const ride =
-      await rideService.createRide(
-        req.body
-      );
+      await rideService.createRide({
+        userId,
+
+        body: req.body,
+
+        files: req.files,
+      });
 
     return res.status(201).json({
       responseCode: "00",
       success: true,
       message:
-        "Journey added successfully",
+        "Journey published successfully",
       data: ride,
     });
   } catch (error) {
@@ -115,7 +138,7 @@ exports.createRide = async (
 };
 
 /**
- * Calculate alternative routes
+ * Calculate alternative routes.
  */
 exports.calculateRoutes = async (
   req,
