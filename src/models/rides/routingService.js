@@ -151,22 +151,36 @@ const calculateRoutes = async (pickup, drop) => {
  *   end_location
  */
 const normalizeOlaRoutes = (data) => {
-
   const olaRoutes = Array.isArray(data?.routes)
     ? data.routes
     : [];
-
-
 
   if (!olaRoutes.length) {
     return [];
   }
 
   return olaRoutes.map((route, index) => {
-    const distanceMeters = Number(route?.distance || 0);
+    // Ola Maps returns distance/duration inside legs
+    const legs = Array.isArray(route?.legs)
+      ? route.legs
+      : [];
 
-    const durationSeconds = Number(route?.duration || 0);
+    // For a simple pickup -> drop route, there is normally one leg.
+    // Using reduce also keeps this correct if multiple legs are returned.
+    const distanceMeters = legs.reduce(
+      (total, leg) =>
+        total + Number(leg?.distance || 0),
+      0
+    );
 
+    const durationSeconds = legs.reduce(
+      (total, leg) =>
+        total + Number(leg?.duration || 0),
+      0
+    );
+
+    const firstLeg = legs[0] || {};
+    const lastLeg = legs[legs.length - 1] || {};
 
     return {
       route_index: index,
@@ -186,25 +200,25 @@ const normalizeOlaRoutes = (data) => {
         route?.summary || "",
 
       start_location:
-        route?.legs?.[0]?.start_location
+        firstLeg?.start_location
           ? {
               latitude: Number(
-                route.legs[0].start_location.lat
+                firstLeg.start_location.lat
               ),
               longitude: Number(
-                route.legs[0].start_location.lng
+                firstLeg.start_location.lng
               ),
             }
           : null,
 
       end_location:
-        route?.legs?.[0]?.end_location
+        lastLeg?.end_location
           ? {
               latitude: Number(
-                route.legs[0].end_location.lat
+                lastLeg.end_location.lat
               ),
               longitude: Number(
-                route.legs[0].end_location.lng
+                lastLeg.end_location.lng
               ),
             }
           : null,
