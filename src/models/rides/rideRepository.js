@@ -14,60 +14,198 @@ const searchRides = async ({
     SELECT
       rides.id,
       rides.user_id,
+
       users.full_name AS traveller_name,
       users.phone AS traveller_phone,
+
       rides.transport_type,
       rides.transport_mode,
+
       rides.pickup_city,
       rides.pickup_state,
       rides.pickup_latitude,
       rides.pickup_longitude,
+
       rides.drop_city,
       rides.drop_state,
       rides.drop_latitude,
       rides.drop_longitude,
+
       rides.travel_date,
       rides.departure_time,
+
       rides.available_weight,
       rides.price_per_kg,
+
+      COALESCE(
+        (
+          SELECT SUM(b.package_weight_kg)
+          FROM bookings b
+          WHERE b.ride_id = rides.id
+            AND b.booking_status IN (
+              'PENDING',
+              'CONFIRMED',
+              'PICKUP_PENDING',
+              'PICKED_UP',
+              'IN_TRANSIT'
+            )
+        ),
+        0
+      ) AS booked_weight,
+
+      (
+        rides.available_weight -
+        COALESCE(
+          (
+            SELECT SUM(b.package_weight_kg)
+            FROM bookings b
+            WHERE b.ride_id = rides.id
+              AND b.booking_status IN (
+                'PENDING',
+                'CONFIRMED',
+                'PICKUP_PENDING',
+                'PICKED_UP',
+                'IN_TRANSIT'
+              )
+          ),
+          0
+        )
+      ) AS remaining_weight,
+
       rides.route_index,
       rides.route_distance_km,
       rides.route_duration_minutes,
       rides.route_polyline,
+
       rides.status,
       rides.notes,
       rides.created_at,
       rides.updated_at
+
     FROM rides
+
     INNER JOIN users
       ON rides.user_id = users.user_id
+
     WHERE rides.status = 'active'
   `;
 
   const params = [];
 
   if (from) {
-    query += ` AND LOWER(rides.pickup_city) = LOWER(?) `;
+    query += `
+      AND LOWER(rides.pickup_city)
+      = LOWER(?)
+    `;
+
     params.push(from);
   }
 
   if (to) {
-    query += ` AND LOWER(rides.drop_city) = LOWER(?) `;
+    query += `
+      AND LOWER(rides.drop_city)
+      = LOWER(?)
+    `;
+
     params.push(to);
   }
 
   if (date) {
-    query += ` AND rides.travel_date = ? `;
+    query += `
+      AND rides.travel_date = ?
+    `;
+
     params.push(date);
   }
 
-  if (minWeight !== null && maxWeight !== null) {
-    query += ` AND rides.available_weight BETWEEN ? AND ? `;
-    params.push(minWeight, maxWeight);
-  } else if (minWeight !== null) {
-    query += ` AND rides.available_weight >= ? `;
+
+  // Search based on ACTUAL remaining capacity
+  if (
+    minWeight !== null &&
+    maxWeight !== null
+  ) {
+    query += `
+      AND (
+        rides.available_weight -
+        COALESCE(
+          (
+            SELECT SUM(
+              b.package_weight_kg
+            )
+            FROM bookings b
+            WHERE b.ride_id = rides.id
+              AND b.booking_status IN (
+                'PENDING',
+                'CONFIRMED',
+                'PICKUP_PENDING',
+                'PICKED_UP',
+                'IN_TRANSIT'
+              )
+          ),
+          0
+        )
+      ) BETWEEN ? AND ?
+    `;
+
+    params.push(
+      minWeight,
+      maxWeight
+    );
+
+  } else if (
+    minWeight !== null
+  ) {
+    query += `
+      AND (
+        rides.available_weight -
+        COALESCE(
+          (
+            SELECT SUM(
+              b.package_weight_kg
+            )
+            FROM bookings b
+            WHERE b.ride_id = rides.id
+              AND b.booking_status IN (
+                'PENDING',
+                'CONFIRMED',
+                'PICKUP_PENDING',
+                'PICKED_UP',
+                'IN_TRANSIT'
+              )
+          ),
+          0
+        )
+      ) >= ?
+    `;
+
     params.push(minWeight);
   }
+
+
+  // Never return a ride with zero capacity
+  query += `
+    AND (
+      rides.available_weight -
+      COALESCE(
+        (
+          SELECT SUM(
+            b.package_weight_kg
+          )
+          FROM bookings b
+          WHERE b.ride_id = rides.id
+            AND b.booking_status IN (
+              'PENDING',
+              'CONFIRMED',
+              'PICKUP_PENDING',
+              'PICKED_UP',
+              'IN_TRANSIT'
+            )
+        ),
+        0
+      )
+    ) > 0
+  `;
+
 
   query += `
     ORDER BY
@@ -75,7 +213,13 @@ const searchRides = async ({
       rides.departure_time ASC
   `;
 
-  const [rows] = await db.query(query, params);
+
+  const [rows] =
+    await db.query(
+      query,
+      params
+    );
+
   return rows;
 };
 

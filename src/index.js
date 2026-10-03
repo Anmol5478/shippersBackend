@@ -16,13 +16,12 @@ app.use(express.json());
 
 const authRoutes = require("./models/auth/authRoutes");
 const cityRoutes = require("./models/cities/cityRoutes");
-const forgotPasswordRoutes = require(
-  "./models/forgotpassword/forgotPasswordRoutes"
-);
+const forgotPasswordRoutes = require("./models/forgotpassword/forgotPasswordRoutes");
 const kycRoutes = require("./models/kyc/kycRoutes");
 const rideRoutes = require("./models/rides/rideRoutes");
 const profileRoutes =require("./models/profile/profileRoutes");
 const PORT = process.env.PORT || 8000;
+const bookingRoutes =require("./models/bookings/bookingRoutes");
 
 app.get("/", async (req, res) => {
   try {const express = require("express");
@@ -123,6 +122,7 @@ app.use("/api/rides", rideRoutes);
 app.use("/api/profile", profileRoutes);
 
 app.use("/api/kyc",kycRoutes);
+app.use("/api/bookings",bookingRoutes);
 
 
 app.use(
