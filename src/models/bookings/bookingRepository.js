@@ -1,17 +1,19 @@
 const db = require("../../config/db");
 
 /**
- * Get ride and lock it for booking.
- *
- * FOR UPDATE prevents two users from booking
- * the same remaining capacity simultaneously.
+ * Get ride and lock it during booking.
  */
-const getRideForBooking = async (connection, rideId) => {
+const getRideForBooking = async (
+  connection,
+  rideId
+) => {
   const [rows] = await connection.execute(
     `
       SELECT
         id,
         user_id,
+        transport_type,
+        transport_mode,
         pickup_city,
         pickup_state,
         drop_city,
@@ -19,8 +21,8 @@ const getRideForBooking = async (connection, rideId) => {
         travel_date,
         departure_time,
         available_weight,
-        price_per_kg,
-        status
+        status,
+        price_per_kg
       FROM rides
       WHERE id = ?
       LIMIT 1
@@ -34,11 +36,7 @@ const getRideForBooking = async (connection, rideId) => {
 
 
 /**
- * Calculate already reserved weight.
- *
- * PENDING and CONFIRMED bookings consume capacity.
- *
- * Cancelled / rejected bookings do not.
+ * Calculate weight already booked for the ride.
  */
 const getReservedWeight = async (
   connection,
@@ -77,73 +75,62 @@ const createBooking = async (
   connection,
   booking
 ) => {
-  const query = `
-    INSERT INTO bookings (
-      booking_reference,
-      ride_id,
-      shipper_user_id,
-      package_weight_kg,
-      package_category,
-      package_description,
-      package_count,
-      sender_name,
-      sender_phone,
-      pickup_address,
-      drop_address,
-      notes,
-      estimated_amount,
-      payment_method,
-      payment_collection_point,
-      payment_status,
-      booking_status,
-      pickup_otp,
-      delivery_otp
-    )
-    VALUES (
-      ?, ?, ?, ?,
-      ?, ?, ?,
-      ?, ?,
-      ?, ?,
-      ?,
-      ?,
-      ?, ?,
-      'PENDING',
-      'PENDING',
-      ?, ?
-    )
-  `;
-
-  const params = [
-    booking.booking_reference,
-    booking.ride_id,
-    booking.shipper_user_id,
-    booking.package_weight_kg,
-
-    booking.package_category,
-    booking.package_description,
-    booking.package_count,
-
-    booking.sender_name,
-    booking.sender_phone,
-
-    booking.pickup_address,
-    booking.drop_address,
-
-    booking.notes,
-
-    booking.estimated_amount,
-
-    booking.payment_method,
-    booking.payment_collection_point,
-
-    booking.pickup_otp,
-    booking.delivery_otp,
-  ];
-
   const [result] =
     await connection.execute(
-      query,
-      params
+      `
+        INSERT INTO bookings (
+          booking_reference,
+          ride_id,
+          sender_id,
+          driver_id,
+          package_weight_kg,
+          package_description,
+          sender_name,
+          sender_phone,
+          notes,
+          price_per_kg,
+          total_amount,
+          payment_method,
+          payment_collection_point,
+          payment_status,
+          booking_status
+        )
+        VALUES (
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?,
+          ?, ?,
+          'PENDING',
+          'PENDING'
+        )
+      `,
+      [
+        booking.booking_reference,
+
+        booking.ride_id,
+
+        booking.sender_id,
+
+        booking.driver_id,
+
+        booking.package_weight_kg,
+
+        booking.package_description,
+
+        booking.sender_name,
+
+        booking.sender_phone,
+
+        booking.notes,
+
+        booking.price_per_kg,
+
+        booking.total_amount,
+
+        booking.payment_method,
+
+        booking.payment_collection_point,
+      ]
     );
 
   return result.insertId;
@@ -151,130 +138,138 @@ const createBooking = async (
 
 
 /**
- * Get booking details.
+ * Get booking by ID.
  */
-const getBookingById = async (bookingId) => {
-  const [rows] = await db.execute(
-    `
-      SELECT
-        b.*,
+const getBookingById = async (
+  bookingId
+) => {
+  const [rows] =
+    await db.execute(
+      `
+        SELECT
+          b.*,
 
-        r.user_id AS traveller_user_id,
-        r.pickup_city,
-        r.pickup_state,
-        r.drop_city,
-        r.drop_state,
-        r.travel_date,
-        r.departure_time,
-        r.available_weight,
-        r.price_per_kg,
-        r.transport_type,
-        r.transport_mode,
+          r.user_id AS driver_id_from_ride,
 
-        u.full_name AS traveller_name,
-        u.phone AS traveller_phone
+          r.transport_type,
+          r.transport_mode,
 
-      FROM bookings b
+          r.pickup_city,
+          r.pickup_state,
+          r.drop_city,
+          r.drop_state,
 
-      INNER JOIN rides r
-        ON b.ride_id = r.id
+          r.travel_date,
+          r.departure_time,
 
-      INNER JOIN users u
-        ON r.user_id = u.user_id
+          r.available_weight,
+          r.price_per_kg AS ride_price_per_kg,
 
-      WHERE b.id = ?
+          r.route_distance_km,
+          r.route_duration_minutes,
+          r.route_polyline
 
-      LIMIT 1
-    `,
-    [bookingId]
-  );
+        FROM bookings b
+
+        INNER JOIN rides r
+          ON b.ride_id = r.id
+
+        WHERE b.id = ?
+
+        LIMIT 1
+      `,
+      [bookingId]
+    );
 
   return rows[0] || null;
 };
 
 
 /**
- * Get bookings created by shipper.
+ * Get bookings created by sender.
  */
-const getUserBookings = async (userId) => {
-  const [rows] = await db.execute(
-    `
-      SELECT
-        b.*,
+const getSenderBookings = async (
+  senderId
+) => {
+  const [rows] =
+    await db.execute(
+      `
+        SELECT
+          b.*,
 
-        r.user_id AS traveller_user_id,
-        r.pickup_city,
-        r.pickup_state,
-        r.drop_city,
-        r.drop_state,
-        r.travel_date,
-        r.departure_time,
-        r.available_weight,
-        r.price_per_kg,
-        r.transport_type,
-        r.transport_mode,
+          r.transport_type,
+          r.transport_mode,
 
-        u.full_name AS traveller_name,
-        u.phone AS traveller_phone
+          r.pickup_city,
+          r.pickup_state,
+          r.drop_city,
+          r.drop_state,
 
-      FROM bookings b
+          r.travel_date,
+          r.departure_time,
 
-      INNER JOIN rides r
-        ON b.ride_id = r.id
+          r.available_weight,
 
-      INNER JOIN users u
-        ON r.user_id = u.user_id
+          r.route_distance_km,
+          r.route_duration_minutes,
+          r.route_polyline
 
-      WHERE b.shipper_user_id = ?
+        FROM bookings b
 
-      ORDER BY b.created_at DESC
-    `,
-    [userId]
-  );
+        INNER JOIN rides r
+          ON b.ride_id = r.id
+
+        WHERE b.sender_id = ?
+
+        ORDER BY b.created_at DESC
+      `,
+      [senderId]
+    );
 
   return rows;
 };
 
 
 /**
- * Get bookings received for traveller's rides.
+ * Get bookings received by driver.
  */
-const getTravellerBookings = async (
-  userId
+const getDriverBookings = async (
+  driverId
 ) => {
-  const [rows] = await db.execute(
-    `
-      SELECT
-        b.*,
+  const [rows] =
+    await db.execute(
+      `
+        SELECT
+          b.*,
 
-        r.pickup_city,
-        r.pickup_state,
-        r.drop_city,
-        r.drop_state,
-        r.travel_date,
-        r.departure_time,
-        r.available_weight,
-        r.price_per_kg,
-        r.transport_type,
-        r.transport_mode,
+          r.transport_type,
+          r.transport_mode,
 
-        u.full_name AS shipper_name,
-        u.phone AS shipper_phone
+          r.pickup_city,
+          r.pickup_state,
+          r.drop_city,
+          r.drop_state,
 
-      FROM bookings b
+          r.travel_date,
+          r.departure_time,
 
-      INNER JOIN rides r
-        ON b.ride_id = r.id
+          r.available_weight,
 
-      INNER JOIN users u
-        ON b.shipper_user_id = u.user_id
+          r.route_distance_km,
+          r.route_duration_minutes,
+          r.route_polyline
 
-      WHERE r.user_id = ?
+        FROM bookings b
 
-      ORDER BY b.created_at DESC
-    `,
-    [userId]
-  );
+        INNER JOIN rides r
+          ON b.ride_id = r.id
+
+        WHERE b.driver_id = ?
+
+        ORDER BY b.created_at DESC
+      `,
+      [driverId]
+    );
 
   return rows;
 };
@@ -287,34 +282,42 @@ const updateBookingStatus = async (
   bookingId,
   status
 ) => {
-  const [result] = await db.execute(
-    `
-      UPDATE bookings
-      SET booking_status = ?
-      WHERE id = ?
-    `,
-    [status, bookingId]
-  );
+  const [result] =
+    await db.execute(
+      `
+        UPDATE bookings
+        SET booking_status = ?
+        WHERE id = ?
+      `,
+      [
+        status,
+        bookingId,
+      ]
+    );
 
   return result.affectedRows > 0;
 };
 
 
 /**
- * Update payment.
+ * Update payment status.
  */
 const updatePaymentStatus = async (
   bookingId,
   paymentStatus
 ) => {
-  const [result] = await db.execute(
-    `
-      UPDATE bookings
-      SET payment_status = ?
-      WHERE id = ?
-    `,
-    [paymentStatus, bookingId]
-  );
+  const [result] =
+    await db.execute(
+      `
+        UPDATE bookings
+        SET payment_status = ?
+        WHERE id = ?
+      `,
+      [
+        paymentStatus,
+        bookingId,
+      ]
+    );
 
   return result.affectedRows > 0;
 };
@@ -325,8 +328,8 @@ module.exports = {
   getReservedWeight,
   createBooking,
   getBookingById,
-  getUserBookings,
-  getTravellerBookings,
+  getSenderBookings,
+  getDriverBookings,
   updateBookingStatus,
   updatePaymentStatus,
 };
