@@ -569,9 +569,84 @@ const calculateRoutes = async (data) => {
   );
 };
 
+/**
+ * Driver accepts / rejects a booking received on one of their rides.
+ *
+ * Authorization is based on rides.user_id, not sender_id.
+ * The authenticated user must be the owner/driver of the ride
+ * attached to the booking.
+ */
+const updateBookingStatus = async ({ bookingId, userId, status }) => {
+  if (!userId) {
+    throw new Error("Authenticated user is required");
+  }
+
+  const id = Number(bookingId);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Invalid booking ID");
+  }
+
+  const finalStatus = String(status || "")
+    .trim()
+    .toUpperCase();
+
+  // Keep the existing database values for compatibility.
+  // APPROVED is accepted as an alias for CONFIRMED.
+  const normalizedStatus =
+    finalStatus === "APPROVED"
+      ? "CONFIRMED"
+      : finalStatus;
+
+  const allowedStatuses = ["CONFIRMED", "REJECTED"];
+
+  if (!allowedStatuses.includes(normalizedStatus)) {
+    throw new Error(
+      "Invalid booking status. Allowed: CONFIRMED, REJECTED"
+    );
+  }
+
+  const booking = await rideRepository.getBookingForStatusUpdate(id);
+
+  if (!booking) {
+    throw new Error("Booking not found");
+  }
+
+  // IMPORTANT:
+  // The ride owner/driver is the only person who can approve/reject.
+  if (String(booking.ride_owner_id) !== String(userId)) {
+    throw new Error(
+      "Only the driver who published this ride can approve or reject this booking"
+    );
+  }
+
+  if (booking.booking_status !== "PENDING") {
+    throw new Error(
+      "Only pending bookings can be accepted or rejected"
+    );
+  }
+
+  const updated = await rideRepository.updateBookingStatus(
+    id,
+    normalizedStatus
+  );
+
+  if (!updated) {
+    throw new Error(
+      "Booking status could not be updated. It may no longer be pending"
+    );
+  }
+
+  // Return the latest booking details using the existing booking repository.
+  // This avoids duplicating the full booking response query in rides.
+  const bookingRepository = require("../bookings/bookingRepository");
+  return bookingRepository.getBookingById(id);
+};
+
 module.exports = {
   searchRides,
   getUserRides,
   createRide,
   calculateRoutes,
+  updateBookingStatus,
 };

@@ -229,4 +229,56 @@ router.post(
   rideController.createRide
 );
 
+
+/**
+ * @swagger
+ * /api/rides/bookings/{bookingId}/status:
+ *   patch:
+ *     summary: Driver accepts or rejects a booking
+ *     description: |
+ *       Accepts or rejects a pending booking received on a ride.
+ *       Only the driver/user who published the ride can perform this action.
+ *       The driver ID is taken from the authenticated JWT; it must not be sent
+ *       by the client.
+ *     tags:
+ *       - Rides
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         example: 12
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum:
+ *                   - CONFIRMED
+ *                   - REJECTED
+ *                   - APPROVED
+ *                 example: CONFIRMED
+ *     responses:
+ *       200:
+ *         description: Booking status updated successfully
+ *       400:
+ *         description: Invalid booking status or booking is not pending
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch(
+  "/bookings/:bookingId/status",
+  authenticate,
+  rideController.updateBookingStatus
+);
+
 module.exports = router;

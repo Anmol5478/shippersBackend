@@ -118,3 +118,41 @@ exports.calculateRoutes = async (req, res) => {
     });
   }
 };
+/**
+ * Driver accepts / rejects a booking for their ride.
+ * The authenticated driver is taken from the JWT.
+ */
+exports.updateBookingStatus = async (req, res) => {
+  try {
+    const userId = req.user?.user_id;
+
+    if (!userId) {
+      return res.status(401).json({
+        responseCode: "01",
+        success: false,
+        message: "Authenticated user ID not found",
+      });
+    }
+
+    const data = await rideService.updateBookingStatus({
+      bookingId: req.params.bookingId,
+      userId,
+      status: req.body?.status,
+    });
+
+    return res.status(200).json({
+      responseCode: "00",
+      success: true,
+      message: "Booking status updated successfully",
+      data,
+    });
+  } catch (error) {
+    console.error("updateBookingStatus controller error:", error);
+
+    return res.status(400).json({
+      responseCode: "01",
+      success: false,
+      message: error.message,
+    });
+  }
+};

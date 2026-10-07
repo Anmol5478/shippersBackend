@@ -428,6 +428,50 @@ const getRideProof = async (rideId) => {
   return rows[0] || null;
 };
 
+/**
+ * Get a booking together with its ride owner.
+ * This is intentionally kept in the rides repository because
+ * booking approval/rejection is a driver/ride-owner action.
+ */
+const getBookingForStatusUpdate = async (bookingId) => {
+  const [rows] = await db.execute(
+    `
+      SELECT
+        b.id,
+        b.ride_id,
+        b.sender_id,
+        b.driver_id,
+        b.booking_status,
+        r.user_id AS ride_owner_id
+      FROM bookings b
+      INNER JOIN rides r ON b.ride_id = r.id
+      WHERE b.id = ?
+      LIMIT 1
+    `,
+    [bookingId]
+  );
+
+  return rows[0] || null;
+};
+
+/**
+ * Update booking status after the ride-owner authorization
+ * has already been verified by the service.
+ */
+const updateBookingStatus = async (bookingId, status) => {
+  const [result] = await db.execute(
+    `
+      UPDATE bookings
+      SET booking_status = ?
+      WHERE id = ?
+        AND booking_status = 'PENDING'
+    `,
+    [status, bookingId]
+  );
+
+  return result.affectedRows > 0;
+};
+
 module.exports = {
   searchRides,
   getUserRides,
@@ -435,4 +479,6 @@ module.exports = {
   insertRideOnly,
   insertTravelProof,
   getRideProof,
+  getBookingForStatusUpdate,
+  updateBookingStatus,
 };

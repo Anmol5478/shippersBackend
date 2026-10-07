@@ -199,49 +199,5 @@ router.patch(
 );
 
 
-/**
- * @swagger
- * /api/bookings/{bookingId}/status:
- *   patch:
- *     summary: Accept or reject a booking
- *     tags: [Bookings]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: bookingId
- *         required: true
- *         schema:
- *           type: integer
- *         example: 12
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum:
- *                   - CONFIRMED
- *                   - REJECTED
- *                 example: CONFIRMED
- *     responses:
- *       200:
- *         description: Booking status updated successfully
- *       400:
- *         description: Invalid booking status
- *       401:
- *         description: Unauthorized
- */
-router.patch(
-  "/:bookingId/status",
-  authenticate,
-  bookingController.updateBookingStatus
-);
-
 
 module.exports = router;

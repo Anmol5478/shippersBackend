@@ -341,44 +341,10 @@ const cancelBooking = async ({ bookingId, userId }) => {
   return bookingRepository.getBookingById(bookingId);
 };
 
-/**
- * Traveller accepts / rejects a booking.
- */
-const updateBookingStatus = async ({ bookingId, userId, status }) => {
-  const allowedStatuses = ["CONFIRMED", "REJECTED"];
-
-  const finalStatus = String(status || "")
-    .trim()
-    .toUpperCase();
-
-  if (!allowedStatuses.includes(finalStatus)) {
-    throw new Error("Invalid booking status. Allowed: CONFIRMED, REJECTED");
-  }
-
-  const booking = await bookingRepository.getBookingById(bookingId);
-
-  if (!booking) {
-    throw new Error("Booking not found");
-  }
-
-  if (String(booking.driver_id) !== String(userId)) {
-    throw new Error("Only the traveller (driver) can update this booking");
-  }
-
-  if (booking.booking_status !== "PENDING") {
-    throw new Error("Only pending bookings can be accepted or rejected");
-  }
-
-  await bookingRepository.updateBookingStatus(bookingId, finalStatus);
-
-  return bookingRepository.getBookingById(bookingId);
-};
-
 module.exports = {
   createBooking,
   getBooking,
   getUserBookings,
   getTravellerBookings,
   cancelBooking,
-  updateBookingStatus,
 };
