@@ -21,7 +21,8 @@ const kycRoutes = require("./models/kyc/kycRoutes");
 const rideRoutes = require("./models/rides/rideRoutes");
 const profileRoutes =require("./models/profile/profileRoutes");
 const PORT = process.env.PORT || 8000;
-const bookingRoutes =require("./models/bookings/bookingRoutes");
+const bookingRoutes = require("./models/bookings/bookingRoutes");
+const walletRoutes  = require("./models/wallet/walletRoutes");   // ← ADD THIS LINE
 
 app.get("/", async (req, res) => {
   try {const express = require("express");
