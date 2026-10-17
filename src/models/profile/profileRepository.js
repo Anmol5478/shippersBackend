@@ -74,17 +74,17 @@ const getProfileStats = async (user_id) => {
     [user_id]
   );
 
-  // wallet balance only
+  // real wallet balance
   const [walletRows] = await db.query(
     `SELECT balance FROM wallets WHERE user_id = ? LIMIT 1`,
     [user_id]
   );
 
   return {
-    active_parcels: 0,                          // keep as is for now
+    active_parcels: 0,
     published_journeys: rideRows[0]?.published_journeys || 0,
     wallet_balance: Number(walletRows[0]?.balance ?? 0),
-    total_earnings: 0,                          // can fill later
+    total_earnings: 0,
   };
 };
 
