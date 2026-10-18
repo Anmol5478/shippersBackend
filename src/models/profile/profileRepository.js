@@ -68,22 +68,22 @@ const updateProfileImage = async (
 ================================ */
 
 const getProfileStats = async (user_id) => {
-  const ridesQuery = `
-    SELECT COUNT(*) AS published_journeys
-    FROM rides
-    WHERE user_id = ?
-  `;
-
+  // published journeys
   const [rideRows] = await db.query(
-    ridesQuery,
+    `SELECT COUNT(*) AS published_journeys FROM rides WHERE user_id = ?`,
+    [user_id]
+  );
+
+  // real wallet balance
+  const [walletRows] = await db.query(
+    `SELECT balance FROM wallets WHERE user_id = ? LIMIT 1`,
     [user_id]
   );
 
   return {
     active_parcels: 0,
-    published_journeys:
-      rideRows[0]?.published_journeys || 0,
-    wallet_balance: 0,
+    published_journeys: rideRows[0]?.published_journeys || 0,
+    wallet_balance: Number(walletRows[0]?.balance ?? 0),
     total_earnings: 0,
   };
 };

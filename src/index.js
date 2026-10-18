@@ -21,7 +21,8 @@ const kycRoutes = require("./models/kyc/kycRoutes");
 const rideRoutes = require("./models/rides/rideRoutes");
 const profileRoutes =require("./models/profile/profileRoutes");
 const PORT = process.env.PORT || 8000;
-const bookingRoutes =require("./models/bookings/bookingRoutes");
+const bookingRoutes = require("./models/bookings/bookingRoutes");
+const walletRoutes  = require("./models/wallet/walletRoutes");   // ← ADD THIS LINE
 
 app.get("/", async (req, res) => {
   try {const express = require("express");
@@ -50,7 +51,12 @@ const forgotPasswordRoutes = require(
 );
 
 const rideRoutes = require("./models/rides/rideRoutes");
+const walletController = require("./models/wallet/walletController"); // or authMiddleware
 
+// GET /api/wallet  → balance + transactions + bank details
+router.get("/", authenticate, walletController.getWallet);
+
+module.exports = router;
 // Root route
 app.get("/", async (req, res) => {
   try {
@@ -120,7 +126,7 @@ app.use("/api/cities", cityRoutes);
 app.use("/api/auth", forgotPasswordRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/profile", profileRoutes);
-
+app.use("/api/wallet", walletRoutes);   // ← add this
 app.use("/api/kyc",kycRoutes);
 app.use("/api/bookings",bookingRoutes);
 
