@@ -9,12 +9,7 @@ const options = {
       version: "1.1.0",
       description: "Shippers API documentation. Data-fetching endpoints use POST with JSON request bodies; health checks remain GET.",
     },
-servers: [
-  {
-    url: "http://localhost:8000",
-    description: "Local development"
-  }
-],
+servers: [{ url: process.env.RENDER_EXTERNAL_URL || "https://shippers-backend-slmv.onrender.com" }],
     components: {
       securitySchemes: {
         bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
