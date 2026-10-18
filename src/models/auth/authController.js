@@ -6,7 +6,6 @@ exports.signup = async (req, res) => {
 
     return res.status(201).json({
         responseCode:"00",
-      success: true,
       message: "Signup successful",
       data,
     });
@@ -25,7 +24,6 @@ exports.login = async (req, res) => {
 
     return res.status(200).json({
         responseCode:"00",
-      success: true,
       message: "Login successful",
       data,
     });

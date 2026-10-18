@@ -73,6 +73,8 @@ const signup = async (payload) => {
       gender: finalGender,
       role: Number(role),
     });
+    const kycStatus =
+  kycRecord?.kyc_status || "NOT_SUBMITTED";
 
   /*
    * Add user_id to JWT.
@@ -97,6 +99,7 @@ const signup = async (payload) => {
       phone,
       gender: finalGender,
       role: Number(role),
+      kycStatus,
     },
 
     accessToken,
@@ -149,33 +152,6 @@ const kycRecord =
 const kycStatus =
   kycRecord?.kyc_status || "NOT_SUBMITTED";
 
-const kycCompleted =
-  kycStatus === "VERIFIED";
-
-const kycDocuments = {
-  aadhaarFront: !!kycRecord?.aadhaar_front_document_key,
-  aadhaarBack: !!kycRecord?.aadhaar_back_document_key,
-  pan: !!kycRecord?.pan_document_key,
-  selfie: !!kycRecord?.selfie_document_key,
-};
-
-const kycPendingDocuments = [];
-
-if (!kycDocuments.aadhaarFront) {
-  kycPendingDocuments.push("aadhaar_front");
-}
-
-if (!kycDocuments.aadhaarBack) {
-  kycPendingDocuments.push("aadhaar_back");
-}
-
-if (!kycDocuments.pan) {
-  kycPendingDocuments.push("pan");
-}
-
-if (!kycDocuments.selfie) {
-  kycPendingDocuments.push("selfie");
-}
 
   /*
    * Only VERIFIED means KYC = Y.
@@ -183,11 +159,6 @@ if (!kycDocuments.selfie) {
    * PENDING, REJECTED, or no KYC record
    * means KYC = N.
    */
-  const kyc =
-    kycRecord?.kyc_status === "VERIFIED"
-      ? "Y"
-      : "N";
-
   /*
    * ===============================
    * JWT
@@ -211,13 +182,7 @@ return {
     phone: user.phone,
     gender: user.gender ?? null,
     role: user.role,
-
-    // KYC
-    kyc,
     kycStatus,
-    kycCompleted,
-    kycDocuments,
-    kycPendingDocuments,
   },
 
   accessToken,
