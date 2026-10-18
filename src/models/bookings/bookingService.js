@@ -1,5 +1,7 @@
 const crypto = require("crypto");
+const sharp = require("sharp");
 const db = require("../../config/db");
+const { uploadToR2, deleteFromR2 } = require("../rides/rideProofStorage");
 const bookingRepository = require("./bookingRepository");
 
 const PAYMENT_METHODS = ["CASH", "UPI", "ONLINE"];
@@ -29,7 +31,7 @@ const generateBookingReference = () => {
  * Generate 6-digit OTP.
  */
 const generateOtp = () => {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(crypto.randomInt(100000, 1000000));
 };
 
 /**
@@ -221,9 +223,6 @@ const createBooking = async ({ userId, body }) => {
     // ========================================
 
     const bookingReference = generateBookingReference();
-    const pickupOtp = generateOtp();
-    const deliveryOtp = generateOtp();
-
     const bookingId = await bookingRepository.createBooking(connection, {
       booking_reference: bookingReference,
       ride_id: rideId,
@@ -244,8 +243,8 @@ const createBooking = async ({ userId, body }) => {
       total_amount: totalAmount,
       payment_method: finalPaymentMethod,
       payment_collection_point: finalPaymentPoint,
-      pickup_otp: pickupOtp,
-      delivery_otp: deliveryOtp,
+      pickup_otp: null,
+      delivery_otp: null,
     });
 
     await connection.commit();
@@ -278,7 +277,7 @@ const createBooking = async ({ userId, body }) => {
 /**
  * Get single booking.
  */
-const getBooking = async ({ bookingId }) => {
+const getBooking = async ({ bookingId, userId }) => {
   const id = Number(bookingId);
 
   if (!Number.isInteger(id) || id <= 0) {
@@ -289,6 +288,16 @@ const getBooking = async ({ bookingId }) => {
 
   if (!booking) {
     throw new Error("Booking not found");
+  }
+
+  if (String(booking.sender_id) !== String(userId) && String(booking.driver_id) !== String(userId)) {
+    throw new Error("You are not allowed to view this booking");
+  }
+
+  // OTPs are deliberately visible only to the sender in their authenticated app.
+  if (String(booking.sender_id) !== String(userId)) {
+    delete booking.pickup_otp;
+    delete booking.delivery_otp;
   }
 
   return booking;
@@ -313,7 +322,12 @@ const getTravellerBookings = async (userId) => {
     throw new Error("Authenticated user is required");
   }
 
-  return bookingRepository.getDriverBookings(userId);
+  const bookings = await bookingRepository.getDriverBookings(userId);
+  return bookings.map((booking) => {
+    delete booking.pickup_otp;
+    delete booking.delivery_otp;
+    return booking;
+  });
 };
 
 /**
@@ -341,10 +355,99 @@ const cancelBooking = async ({ bookingId, userId }) => {
   return bookingRepository.getBookingById(bookingId);
 };
 
+
+/**
+ * Upload pickup/delivery proof first, then generate the corresponding OTP.
+ * Only the driver assigned to this booking may upload proof.
+ */
+const uploadStageProof = async ({ bookingId, userId, stage, file }) => {
+  const id = Number(bookingId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid booking ID");
+  if (!userId) throw new Error("Authenticated user is required");
+  if (!file?.buffer) throw new Error("A proof image is required");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+    throw new Error("Only JPG, PNG and WEBP images are allowed");
+  }
+  if (file.size > 10 * 1024 * 1024) throw new Error("Image must not exceed 10 MB");
+  const normalizedStage = String(stage || "").toLowerCase();
+  if (!["pickup", "delivery"].includes(normalizedStage)) throw new Error("Invalid proof stage");
+
+  const booking = await bookingRepository.getBookingById(id);
+  if (!booking) throw new Error("Booking not found");
+  if (String(booking.driver_id) !== String(userId)) throw new Error("Only the assigned driver can upload proof");
+  if (normalizedStage === "pickup" && booking.booking_status !== "CONFIRMED") {
+    throw new Error("Pickup proof can only be uploaded for a confirmed booking");
+  }
+  if (normalizedStage === "delivery" && !["PICKED_UP", "IN_TRANSIT"].includes(booking.booking_status)) {
+    throw new Error("Delivery proof can only be uploaded after pickup has been verified");
+  }
+
+  const processed = await sharp(file.buffer).rotate().resize({ width: 1800, height: 1800, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+  const documentType = normalizedStage === "pickup" ? "pickup-proof" : "delivery-proof";
+  const key = await uploadToR2({ buffer: processed, rideId: String(id), documentType, namespace: "bookings" });
+  const otp = generateOtp();
+  const otpColumn = normalizedStage === "pickup" ? "pickup_otp" : "delivery_otp";
+  const proofColumn = normalizedStage === "pickup" ? "pickup_proof_key" : "delivery_proof_key";
+  const timestampColumn = normalizedStage === "pickup" ? "pickup_otp_generated_at" : "delivery_otp_generated_at";
+
+  try {
+    const allowedStatusSql = normalizedStage === "pickup"
+      ? "booking_status = 'CONFIRMED'"
+      : "booking_status IN ('PICKED_UP', 'IN_TRANSIT')";
+    const [result] = await db.execute(
+      `UPDATE bookings SET ${proofColumn} = ?, ${otpColumn} = ?, ${timestampColumn} = CURRENT_TIMESTAMP WHERE id = ? AND ${allowedStatusSql}`,
+      [key, otp, id]
+    );
+    if (!result.affectedRows) {
+      await deleteFromR2(key).catch(() => {});
+      throw new Error("Booking status changed; proof was not attached and no OTP was generated");
+    }
+  } catch (error) {
+    await deleteFromR2(key).catch(() => {});
+    throw error;
+  }
+
+  // Never return the OTP from this driver-facing upload endpoint.
+  return { booking_id: id, stage: normalizedStage, proof_uploaded: true, otp_generated: true, message: `Image uploaded. ${normalizedStage === "pickup" ? "Pickup" : "Delivery"} OTP is now available in the sender's authenticated booking details.` };
+};
+
+/** Driver submits the OTP that the sender sees in their authenticated app. */
+const verifyStageOtp = async ({ bookingId, userId, stage, otp }) => {
+  const id = Number(bookingId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Valid booking_id is required");
+  if (!userId) throw new Error("Authenticated user is required");
+  if (!/^\d{6}$/.test(String(otp || ""))) throw new Error("A valid 6-digit OTP is required");
+  const normalizedStage = String(stage || "").toLowerCase();
+  if (!["pickup", "delivery"].includes(normalizedStage)) throw new Error("Invalid verification stage");
+
+  const booking = await bookingRepository.getBookingById(id);
+  if (!booking) throw new Error("Booking not found");
+  if (String(booking.driver_id) !== String(userId)) throw new Error("Only the assigned driver can verify this OTP");
+
+  const expectedOtp = normalizedStage === "pickup" ? booking.pickup_otp : booking.delivery_otp;
+  const proofKey = normalizedStage === "pickup" ? booking.pickup_proof_key : booking.delivery_proof_key;
+  if (!proofKey || !expectedOtp) throw new Error("Upload the required image before generating or verifying the OTP");
+  if (String(expectedOtp) !== String(otp)) throw new Error("Incorrect OTP");
+
+  if (normalizedStage === "pickup") {
+    if (booking.booking_status !== "CONFIRMED") throw new Error("Booking is not ready for pickup verification");
+    const [updateResult] = await db.execute("UPDATE bookings SET booking_status = 'PICKED_UP', pickup_otp = NULL WHERE id = ? AND pickup_otp = ? AND pickup_proof_key IS NOT NULL AND booking_status = 'CONFIRMED'", [id, String(otp)]);
+    if (!updateResult.affectedRows) throw new Error("Pickup OTP has already been used or booking state changed");
+    return { booking_id: id, stage: "pickup", verified: true, booking_status: "PICKED_UP", can_start_ride: true };
+  }
+
+  if (!["PICKED_UP", "IN_TRANSIT"].includes(booking.booking_status)) throw new Error("Pickup must be verified before delivery verification");
+  const [updateResult] = await db.execute("UPDATE bookings SET booking_status = 'DELIVERED', delivery_otp = NULL WHERE id = ? AND delivery_otp = ? AND delivery_proof_key IS NOT NULL AND booking_status IN ('PICKED_UP', 'IN_TRANSIT')", [id, String(otp)]);
+  if (!updateResult.affectedRows) throw new Error("Delivery OTP has already been used or booking state changed");
+  return { booking_id: id, stage: "delivery", verified: true, booking_status: "DELIVERED", delivery_complete: true };
+};
+
 module.exports = {
   createBooking,
   getBooking,
   getUserBookings,
   getTravellerBookings,
   cancelBooking,
+  uploadStageProof,
+  verifyStageOtp,
 };

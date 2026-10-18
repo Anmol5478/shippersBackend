@@ -2,7 +2,7 @@ const db = require("../../config/db");
 
 exports.searchCities = async (req, res) => {
   try {
-    const search = req.query.search?.trim();
+    const search = req.body?.search?.trim();
 
     let query = `
       SELECT

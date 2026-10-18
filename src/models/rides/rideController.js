@@ -5,7 +5,7 @@ const rideService = require("./rideService");
  */
 exports.searchRides = async (req, res) => {
   try {
-    const rides = await rideService.searchRides(req.query);
+    const rides = await rideService.searchRides(req.body || {});
 
     return res.status(200).json({
       responseCode: "00",
@@ -32,7 +32,7 @@ exports.searchRides = async (req, res) => {
  */
 exports.getUserRides = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.body?.user_id;
 
     const rides = await rideService.getUserRides(userId);
 

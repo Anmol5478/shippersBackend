@@ -6,23 +6,22 @@ const options = {
     openapi: "3.0.0",
     info: {
       title: "Shippers API",
-      version: "1.0.0",
-      description: "API Documentation for Shippers",
+      version: "1.1.0",
+      description: "Shippers API documentation. Data-fetching endpoints use POST with JSON request bodies; health checks remain GET.",
     },
-    servers: [
-      {
-        url:
-          process.env.RENDER_EXTERNAL_URL ||
-          "https://shippers-backend-slmv.onrender.com",
+servers: [
+  {
+    url: "http://localhost:8000",
+    description: "Local development"
+  }
+],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
       },
-    ],
+    },
   },
-
   apis: [path.resolve(__dirname, "models/**/*.js")],
 };
 
-const swaggerSpec = swaggerJsDoc(options);
-
-console.log("Swagger Paths:", swaggerSpec.paths);
-
-module.exports = swaggerSpec;
+module.exports = swaggerJsDoc(options);
