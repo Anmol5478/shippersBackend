@@ -1,38 +1,103 @@
-const repository = require("./adminRepository");
+const adminRepository = require("./adminRepository");
 
-const pagination = (query) => {
-  const parsedLimit = Number.parseInt(query.limit, 10);
-  const parsedPage = Number.parseInt(query.page, 10);
-  const limit = Number.isFinite(parsedLimit)
-    ? Math.min(Math.max(parsedLimit, 1), 100)
-    : 20;
-  const page = Number.isFinite(parsedPage) ? Math.max(parsedPage, 1) : 1;
-
-  return {
-    limit,
-    page,
-    offset: (page - 1) * limit,
-  };
+const getDashboard = async () => {
+  return adminRepository.getDashboardStats();
 };
 
-const withPagination = async (query, fetcher) => {
-  const pageInfo = pagination(query);
-  const result = await fetcher({ ...pageInfo, ...query });
-  return {
-    ...result,
-    pagination: {
-      page: pageInfo.page,
-      limit: pageInfo.limit,
-      total: result.total,
-      totalPages: Math.ceil(result.total / pageInfo.limit),
-    },
-  };
+const listUsers = async (query) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  return adminRepository.listUsers({
+    role: query.role,
+    search: query.search,
+    page,
+    limit,
+  });
+};
+
+const getUser = async (userId) => {
+  if (!userId) throw new Error("user_id is required");
+  const user = await adminRepository.getUserById(userId);
+  if (!user) throw new Error("User not found");
+  return user;
+};
+
+const listKyc = async (query) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  return adminRepository.listKyc({
+    status: query.status,
+    page,
+    limit,
+  });
+};
+
+const getKyc = async (userId) => {
+  if (!userId) throw new Error("user_id is required");
+  const kyc = await adminRepository.getKycByUserId(userId);
+  if (!kyc) throw new Error("KYC record not found");
+  return kyc;
+};
+
+const approveKyc = async ({ userId, adminUserId }) => {
+  if (!userId) throw new Error("user_id is required");
+
+  const existing = await adminRepository.getKycByUserId(userId);
+  if (!existing) throw new Error("KYC record not found");
+
+  return adminRepository.updateKycStatus({
+    userId,
+    status: "VERIFIED",
+    rejectionReason: null,
+    approvedBy: adminUserId || null,
+  });
+};
+
+const rejectKyc = async ({ userId, reason, adminUserId }) => {
+  if (!userId) throw new Error("user_id is required");
+  if (!reason || !String(reason).trim()) {
+    throw new Error("Rejection reason is required");
+  }
+
+  const existing = await adminRepository.getKycByUserId(userId);
+  if (!existing) throw new Error("KYC record not found");
+
+  return adminRepository.updateKycStatus({
+    userId,
+    status: "REJECTED",
+    rejectionReason: String(reason).trim(),
+    approvedBy: adminUserId || null,
+  });
+};
+
+const listRides = async (query) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  return adminRepository.listRides({
+    status: query.status,
+    page,
+    limit,
+  });
+};
+
+const listBookings = async (query) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  return adminRepository.listBookings({
+    status: query.status,
+    page,
+    limit,
+  });
 };
 
 module.exports = {
-  getDashboardStats: () => repository.getDashboardStats(),
-  listUsers: (query) => withPagination(query, repository.listUsers),
-  listRides: (query) => withPagination(query, repository.listRides),
-  listBookings: (query) => withPagination(query, repository.listBookings),
-  listKycApplications: (query) => withPagination(query, repository.listKycApplications),
+  getDashboard,
+  listUsers,
+  getUser,
+  listKyc,
+  getKyc,
+  approveKyc,
+  rejectKyc,
+  listRides,
+  listBookings,
 };
