@@ -18,6 +18,7 @@ const rideRoutes = require("./models/rides/rideRoutes");
 const profileRoutes = require("./models/profile/profileRoutes");
 const bookingRoutes = require("./models/bookings/bookingRoutes");
 const walletRoutes = require("./models/wallet/walletRoutes");
+const adminRoutes = require("./models/admin/adminRoutes");
 
 app.post("/health/database", async (_req, res) => {
   try {
@@ -36,6 +37,7 @@ app.use("/api/rides", rideRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/wallet", walletRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.post("/health/ping-server-9x7k", (_req, res) => res.status(200).json({ success: true }));
 
