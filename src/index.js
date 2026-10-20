@@ -39,6 +39,9 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/health/ping-server-9x7k", (_req, res) =>
+  res.status(200).json({ success: true })
+);
 app.post("/health/ping-server-9x7k", (_req, res) => res.status(200).json({ success: true }));
 
 const PORT = process.env.PORT || 8000;
