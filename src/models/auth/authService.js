@@ -73,8 +73,7 @@ const signup = async (payload) => {
       gender: finalGender,
       role: Number(role),
     });
-    const kycStatus =
-  kycRecord?.kyc_status || "NOT_SUBMITTED";
+    const kycStatus = "NOT_SUBMITTED";
 
   /*
    * Add user_id to JWT.
