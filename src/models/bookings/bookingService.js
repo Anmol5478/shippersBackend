@@ -388,7 +388,7 @@ const uploadStageProof = async ({ bookingId, userId, stage, file }) => {
   const otp = generateOtp();
   const otpColumn = normalizedStage === "pickup" ? "pickup_otp" : "delivery_otp";
   const proofColumn = normalizedStage === "pickup" ? "pickup_proof_key" : "delivery_proof_key";
-  const timestampColumn = normalizedStage === "pickup" ? "pickup_otp_generated_at" : "delivery_otp_generated_at";
+  const timestampColumn = normalizedStage === "pickup" ? "pickup_otp" : "delivery_otp";
 
   try {
     const allowedStatusSql = normalizedStage === "pickup"
