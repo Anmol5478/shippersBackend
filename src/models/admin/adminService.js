@@ -134,9 +134,13 @@ const getBooking = async (bookingId) => {
 };
 
 /**
- * PNR status check.
- * Uses optional RAPIDAPI_PNR_KEY env for RapidAPI Indian Railway PNR.
- * Falls back to structured manual-check payload with external links.
+ * PNR status check via RapidAPI:
+ * real-time-pnr-status-api-for-indian-railways
+ * GET /name/{pnr}  (PNR Status With Name)
+ *
+ * Env:
+ *   RAPIDAPI_PNR_KEY  (required for live data)
+ *   RAPIDAPI_PNR_HOST (optional override)
  */
 const checkPnr = async (pnr) => {
   const cleaned = String(pnr || "")
@@ -167,42 +171,110 @@ const checkPnr = async (pnr) => {
     },
   };
 
-  const rapidKey = process.env.RAPIDAPI_PNR_KEY || process.env.RAPIDAPI_KEY;
-  if (rapidKey) {
-    try {
-      const res = await fetch(
-        `https://irctc1.p.rapidapi.com/api/v3/getPNRStatus?pnrNumber=${cleaned}`,
-        {
-          method: "GET",
-          headers: {
-            "x-rapidapi-host": "irctc1.p.rapidapi.com",
-            "x-rapidapi-key": rapidKey,
-          },
-        }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const body = data?.data || data;
-        result.source = "rapidapi";
-        result.raw = body;
-        result.status = body?.Status || body?.status || body?.ChartStatus || null;
-        result.train =
-          body?.TrainNo || body?.TrainNumber
-            ? `${body.TrainNo || body.TrainNumber} ${body.TrainName || ""}`.trim()
-            : null;
-        result.from = body?.From || body?.SourceStation || body?.BoardingPoint || null;
-        result.to = body?.To || body?.DestinationStation || null;
-        result.journey_date =
-          body?.Doj || body?.JourneyDate || body?.DepartureDate || null;
-        result.chart_prepared =
-          body?.ChartPrepared ?? body?.chartPrepared ?? null;
-        if (Array.isArray(body?.PassengerStatus || body?.Passengers)) {
-          result.passengers = body.PassengerStatus || body.Passengers;
-        }
-      }
-    } catch (err) {
-      result.api_error = err.message;
+  const rapidKey =
+    process.env.RAPIDAPI_PNR_KEY ||
+    process.env.RAPIDAPI_KEY ||
+    "";
+
+  const host =
+    process.env.RAPIDAPI_PNR_HOST ||
+    "real-time-pnr-status-api-for-indian-railways.p.rapidapi.com";
+
+  if (!rapidKey) {
+    result.message =
+      "Set RAPIDAPI_PNR_KEY in backend .env for live PNR data. Using external links for manual check.";
+    return result;
+  }
+
+  try {
+    // Endpoint from RapidAPI: GET PNR Status With Name → /name/{pnr}
+    const url = `https://${host}/name/${cleaned}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "x-rapidapi-host": host,
+        "x-rapidapi-key": rapidKey,
+      },
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      result.source = "rapidapi";
+      result.api_error =
+        (data && (data.message || data.error)) ||
+        `RapidAPI HTTP ${res.status}`;
+      result.raw = data;
+      return result;
     }
+
+    const body = data?.data ?? data ?? {};
+    result.source = "rapidapi";
+    result.raw = body;
+
+    // Map common field names from this API family
+    result.status =
+      body.Status ||
+      body.status ||
+      body.ChartStatus ||
+      body.pnr_status ||
+      body.CurrentStatus ||
+      null;
+
+    const trainNo =
+      body.TrainNo || body.TrainNumber || body.train_number || body.trainNumber;
+    const trainName =
+      body.TrainName || body.train_name || body.trainName || "";
+    result.train = trainNo
+      ? `${trainNo} ${trainName}`.trim()
+      : trainName || null;
+
+    result.from =
+      body.From ||
+      body.SourceStation ||
+      body.BoardingPoint ||
+      body.from ||
+      body.source ||
+      null;
+
+    result.to =
+      body.To ||
+      body.DestinationStation ||
+      body.to ||
+      body.destination ||
+      null;
+
+    result.journey_date =
+      body.Doj ||
+      body.JourneyDate ||
+      body.DepartureDate ||
+      body.journey_date ||
+      body.date ||
+      null;
+
+    result.chart_prepared =
+      body.ChartPrepared ?? body.chartPrepared ?? body.chart_prepared ?? null;
+
+    const passengers =
+      body.PassengerStatus ||
+      body.Passengers ||
+      body.passenger ||
+      body.passengers ||
+      [];
+    if (Array.isArray(passengers)) {
+      result.passengers = passengers;
+    } else if (passengers && typeof passengers === "object") {
+      result.passengers = [passengers];
+    }
+
+    // Some responses nest under "name" or similar
+    if (!result.status && body.name) {
+      result.status = body.name;
+    }
+  } catch (err) {
+    result.source = "rapidapi";
+    result.api_error = err.message || String(err);
   }
 
   return result;
