@@ -76,7 +76,6 @@ const unblockUser = async (req, res) => {
   }
 };
 
-
 const listKyc = async (req, res) => {
   try {
     const data = await adminService.listKyc(req.body || {});
@@ -160,7 +159,6 @@ const listRides = async (req, res) => {
   }
 };
 
-
 const getRide = async (req, res) => {
   try {
     const rideId = req.body?.ride_id || req.params?.rideId;
@@ -218,7 +216,6 @@ const rejectRideProof = async (req, res) => {
   }
 };
 
-
 const listBookings = async (req, res) => {
   try {
     const data = await adminService.listBookings(req.body || {});
@@ -231,7 +228,6 @@ const listBookings = async (req, res) => {
     });
   }
 };
-
 
 const getBooking = async (req, res) => {
   try {
@@ -261,15 +257,21 @@ const checkPnr = async (req, res) => {
   }
 };
 
-
 module.exports = {
   getDashboard,
   listUsers,
   getUser,
+  blockUser,
+  unblockUser,
   listKyc,
   getKyc,
   approveKyc,
   rejectKyc,
   listRides,
+  getRide,
+  approveRideProof,
+  rejectRideProof,
   listBookings,
+  getBooking,
+  checkPnr,
 };
