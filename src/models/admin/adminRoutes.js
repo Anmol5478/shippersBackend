@@ -5,31 +5,6 @@ const requireAdmin = require("../../middleware/requireAdmin");
 
 const router = express.Router();
 
-<<<<<<< HEAD
-router.use(authenticate, requireAdmin);
-
-router.post("/dashboard", adminController.getDashboard);
-
-router.post("/users", adminController.listUsers);
-router.post("/users/detail", adminController.getUser);
-router.post("/users/block", adminController.blockUser);
-router.post("/users/unblock", adminController.unblockUser);
-
-router.post("/kyc", adminController.listKyc);
-router.post("/kyc/detail", adminController.getKyc);
-router.post("/kyc/approve", adminController.approveKyc);
-router.post("/kyc/reject", adminController.rejectKyc);
-
-router.post("/rides", adminController.listRides);
-router.post("/rides/detail", adminController.getRide);
-router.post("/rides/proof/approve", adminController.approveRideProof);
-router.post("/rides/proof/reject", adminController.rejectRideProof);
-
-router.post("/bookings", adminController.listBookings);
-router.post("/bookings/detail", adminController.getBooking);
-
-router.post("/pnr/check", adminController.checkPnr);
-=======
 // All admin routes require a valid JWT + admin role (3)
 router.use(authenticate, requireAdmin);
 
@@ -215,6 +190,5 @@ router.post("/rides", adminController.listRides);
  *               limit: { type: integer }
  */
 router.post("/bookings", adminController.listBookings);
->>>>>>> d5497284ba77961a5c3e6015b603744450561203
 
 module.exports = router;

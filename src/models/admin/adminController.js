@@ -40,7 +40,6 @@ const getUser = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
 const blockUser = async (req, res) => {
   try {
     const userId = req.body?.user_id;
@@ -77,8 +76,7 @@ const unblockUser = async (req, res) => {
   }
 };
 
-=======
->>>>>>> d5497284ba77961a5c3e6015b603744450561203
+
 const listKyc = async (req, res) => {
   try {
     const data = await adminService.listKyc(req.body || {});
@@ -162,7 +160,7 @@ const listRides = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
+
 const getRide = async (req, res) => {
   try {
     const rideId = req.body?.ride_id || req.params?.rideId;
@@ -220,8 +218,7 @@ const rejectRideProof = async (req, res) => {
   }
 };
 
-=======
->>>>>>> d5497284ba77961a5c3e6015b603744450561203
+
 const listBookings = async (req, res) => {
   try {
     const data = await adminService.listBookings(req.body || {});
@@ -235,7 +232,7 @@ const listBookings = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
+
 const getBooking = async (req, res) => {
   try {
     const bookingId = req.body?.booking_id || req.params?.bookingId;
@@ -264,30 +261,15 @@ const checkPnr = async (req, res) => {
   }
 };
 
-=======
->>>>>>> d5497284ba77961a5c3e6015b603744450561203
+
 module.exports = {
   getDashboard,
   listUsers,
   getUser,
-<<<<<<< HEAD
-  blockUser,
-  unblockUser,
-=======
->>>>>>> d5497284ba77961a5c3e6015b603744450561203
   listKyc,
   getKyc,
   approveKyc,
   rejectKyc,
   listRides,
-<<<<<<< HEAD
-  getRide,
-  approveRideProof,
-  rejectRideProof,
   listBookings,
-  getBooking,
-  checkPnr,
-=======
-  listBookings,
->>>>>>> d5497284ba77961a5c3e6015b603744450561203
 };
