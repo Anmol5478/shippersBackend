@@ -15,57 +15,45 @@ const upload = multer({
 
 /**
  * @swagger
- * /api/rides/search:
- *   get:
- *     summary: Search available rides
- *     tags:
- *       - Rides
- *     parameters:
- *       - in: query
- *         name: from
- *         required: true
- *         schema:
- *           type: string
- *       - in: query
- *         name: to
- *         required: true
- *         schema:
- *           type: string
- *       - in: query
- *         name: weight
- *         required: false
- *         schema:
- *           type: string
- *       - in: query
- *         name: date
- *         required: false
- *         schema:
- *           type: string
- *           format: date
+ * /api/rides/search-available:
+ *   post:
+ *     summary: Search available rides using JSON filters
+ *     tags: [Rides]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [from, to]
+ *             properties:
+ *               from: { type: string, example: Ghaziabad }
+ *               to: { type: string, example: Delhi }
+ *               weight: { type: string, example: "1-3" }
+ *               date: { type: string, format: date }
  *     responses:
- *       200:
- *         description: Rides fetched successfully
+ *       200: { description: Available rides fetched }
  */
-router.get("/search", rideController.searchRides);
+router.post("/search-available", rideController.searchRides);
 
 /**
  * @swagger
- * /api/rides/user/{userId}:
- *   get:
- *     summary: Get rides published by a user
- *     tags:
- *       - Rides
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
+ * /api/rides/list-by-user:
+ *   post:
+ *     summary: List rides published by a user
+ *     tags: [Rides]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [user_id]
+ *             properties:
+ *               user_id: { type: string, example: D0001 }
  *     responses:
- *       200:
- *         description: User rides fetched successfully
+ *       200: { description: User rides fetched }
  */
-router.get("/user/:userId", rideController.getUserRides);
+router.post("/list-by-user", rideController.getUserRides);
 
 /**
  * @swagger

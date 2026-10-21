@@ -73,8 +73,7 @@ const signup = async (payload) => {
       gender: finalGender,
       role: Number(role),
     });
-    const kycStatus =
-  kycRecord?.kyc_status || "NOT_SUBMITTED";
+    const kycStatus = "NOT_SUBMITTED";
 
   /*
    * Add user_id to JWT.
@@ -136,6 +135,12 @@ const login = async (payload) => {
   if (!isMatch) {
     throw new Error(
       "Invalid email or password"
+    );
+  }
+
+  if (Number(user.is_blocked) === 1) {
+    throw new Error(
+      "Your account has been suspended. Contact support."
     );
   }
 

@@ -1,5 +1,6 @@
 const sharp = require("sharp");
 
+const { assertUserNotBlocked } = require("../../utils/userStatus");
 const rideRepository = require("./rideRepository");
 const routingService = require("./routingService");
 const db = require("../../config/db");
@@ -217,6 +218,11 @@ const shapeRideResponse = (ride) => {
  * On any failure after uploads → rollback + delete R2 objects
  */
 const createRide = async ({ userId, body, files }) => {
+  if (!userId) {
+    throw new Error("Authenticated user is required");
+  }
+  await assertUserNotBlocked(userId);
+
   const {
     transport_type,
     transport_mode,

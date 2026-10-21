@@ -1,203 +1,197 @@
 const express = require("express");
-
+const multer = require("multer");
 const router = express.Router();
+const bookingController = require("./bookingController");
+const authenticate = require("../../middleware/authenticate");
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-const bookingController =
-  require("./bookingController");
-
-const authenticate =
-  require("../../middleware/authenticate");
-
-
-/**
- * @swagger
+/** @swagger
  * tags:
  *   name: Bookings
- *   description: Booking management APIs
+ *   description: Parcel bookings and pickup/delivery verification
  */
 
-
-/**
- * @swagger
- * /api/bookings:
+/** @swagger
+ * /api/bookings/create-booking:
  *   post:
- *     summary: Create a booking
- *     description: Create a parcel booking against an available ride.
+ *     summary: Create a parcel booking (does not generate OTPs)
  *     tags: [Bookings]
- *     security:
- *       - bearerAuth: []
+ *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - ride_id
- *               - package_weight_kg
- *               - sender_name
- *               - sender_phone
+ *             required: [ride_id, package_weight_kg, sender_name, sender_phone]
  *             properties:
- *               ride_id:
- *                 type: integer
- *                 example: 25
- *               package_weight_kg:
- *                 type: number
- *                 format: float
- *                 example: 2.5
- *               package_category:
- *                 type: string
- *                 example: CLOTHES
- *               package_description:
- *                 type: string
- *                 example: Two shirts and one jacket
- *               package_count:
- *                 type: integer
- *                 example: 1
- *               sender_name:
- *                 type: string
- *                 example: Anmol Gupta
- *               sender_phone:
- *                 type: string
- *                 example: "9876543210"
- *               pickup_address:
- *                 type: string
- *                 example: Ghaziabad
- *               drop_address:
- *                 type: string
- *                 example: Delhi
- *               notes:
- *                 type: string
- *                 example: Please handle carefully
- *               payment_method:
- *                 type: string
- *                 enum:
- *                   - CASH
- *                   - UPI
- *                   - ONLINE
- *                 example: CASH
- *               payment_collection_point:
- *                 type: string
- *                 enum:
- *                   - PICKUP
- *                   - DROP
- *                 example: DROP
+ *               ride_id: { type: integer, example: 25 }
+ *               package_weight_kg: { type: number, example: 2.5 }
+ *               package_category: { type: string, example: CLOTHES }
+ *               package_description: { type: string }
+ *               package_count: { type: integer, example: 1 }
+ *               sender_name: { type: string }
+ *               sender_phone: { type: string }
+ *               pickup_address: { type: string }
+ *               drop_address: { type: string }
+ *               notes: { type: string }
+ *               payment_method: { type: string, enum: [CASH, UPI, ONLINE] }
+ *               payment_collection_point: { type: string, enum: [PICKUP, DROP] }
  *     responses:
- *       201:
- *         description: Booking created successfully
- *       400:
- *         description: Invalid booking request
- *       401:
- *         description: Unauthorized
+ *       201: { description: Booking created; no OTP generated }
+ *       400: { description: Invalid booking request }
  */
-router.post(
-  "/",
-  authenticate,
-  bookingController.createBooking
-);
+router.post("/create-booking", authenticate, bookingController.createBooking);
 
-
-/**
- * @swagger
- * /api/bookings/my:
- *   get:
- *     summary: Get current user's bookings
+/** @swagger
+ * /api/bookings/list-my-bookings:
+ *   post:
+ *     summary: List bookings created by the authenticated sender
  *     tags: [Bookings]
- *     security:
- *       - bearerAuth: []
+ *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200:
- *         description: User bookings fetched successfully
- *       401:
- *         description: Unauthorized
+ *       200: { description: Sender bookings, including OTPs only after proof upload }
  */
-router.get(
-  "/my",
-  authenticate,
-  bookingController.getUserBookings
-);
+router.post("/list-my-bookings", authenticate, bookingController.getUserBookings);
 
-
-/**
- * @swagger
- * /api/bookings/received:
- *   get:
- *     summary: Get bookings received for traveller's rides
+/** @swagger
+ * /api/bookings/list-received-bookings:
+ *   post:
+ *     summary: List bookings assigned to the authenticated driver
  *     tags: [Bookings]
- *     security:
- *       - bearerAuth: []
+ *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200:
- *         description: Traveller bookings fetched successfully
- *       401:
- *         description: Unauthorized
+ *       200: { description: Driver bookings; OTP values are never returned }
  */
-router.get(
-  "/received",
-  authenticate,
-  bookingController.getTravellerBookings
-);
+router.post("/list-received-bookings", authenticate, bookingController.getTravellerBookings);
 
-
-/**
- * @swagger
- * /api/bookings/{bookingId}:
- *   get:
- *     summary: Get booking details
+/** @swagger
+ * /api/bookings/fetch-booking-details:
+ *   post:
+ *     summary: Fetch one booking by ID
  *     tags: [Bookings]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: bookingId
- *         required: true
- *         schema:
- *           type: integer
- *         example: 12
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [booking_id]
+ *             properties:
+ *               booking_id: { type: integer, example: 12 }
  *     responses:
- *       200:
- *         description: Booking fetched successfully
- *       400:
- *         description: Booking not found
- *       401:
- *         description: Unauthorized
+ *       200: { description: Booking details; OTP is shown only to the sender }
+ *       403: { description: User is not a participant in this booking }
  */
-router.get(
-  "/:bookingId",
-  authenticate,
-  bookingController.getBooking
-);
+router.post("/fetch-booking-details", authenticate, bookingController.getBooking);
 
-
-/**
- * @swagger
+/** @swagger
  * /api/bookings/{bookingId}/cancel:
  *   patch:
- *     summary: Cancel a booking
+ *     summary: Cancel a booking as its sender
  *     tags: [Bookings]
- *     security:
- *       - bearerAuth: []
+ *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
  *         name: bookingId
  *         required: true
- *         schema:
- *           type: integer
- *         example: 12
+ *         schema: { type: integer }
  *     responses:
- *       200:
- *         description: Booking cancelled successfully
- *       400:
- *         description: Booking cannot be cancelled
- *       401:
- *         description: Unauthorized
+ *       200: { description: Booking cancelled }
  */
-router.patch(
-  "/:bookingId/cancel",
-  authenticate,
-  bookingController.cancelBooking
-);
+router.patch("/:bookingId/cancel", authenticate, bookingController.cancelBooking);
 
+/** @swagger
+ * /api/bookings/{bookingId}/pickup-proof:
+ *   post:
+ *     summary: Driver uploads pickup image; pickup OTP is generated only after upload
+ *     tags: [Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [proofImage]
+ *             properties:
+ *               proofImage: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Image uploaded; OTP is not included in response }
+ */
+router.post("/:bookingId/pickup-proof", authenticate, upload.single("proofImage"), bookingController.uploadPickupProof);
 
+/** @swagger
+ * /api/bookings/{bookingId}/delivery-proof:
+ *   post:
+ *     summary: Driver uploads delivery image; delivery OTP is generated only after upload
+ *     tags: [Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [proofImage]
+ *             properties:
+ *               proofImage: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Image uploaded; OTP is not included in response }
+ */
+router.post("/:bookingId/delivery-proof", authenticate, upload.single("proofImage"), bookingController.uploadDeliveryProof);
+
+/** @swagger
+ * /api/bookings/verify-pickup-otp:
+ *   post:
+ *     summary: Verify pickup OTP and enable ride start
+ *     tags: [Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [booking_id, otp]
+ *             properties:
+ *               booking_id: { type: integer }
+ *               otp: { type: string, example: "123456" }
+ *     responses:
+ *       200: { description: Pickup verified; ride may start }
+ */
+router.post("/verify-pickup-otp", authenticate, bookingController.verifyPickupOtp);
+
+/** @swagger
+ * /api/bookings/verify-delivery-otp:
+ *   post:
+ *     summary: Verify delivery OTP and complete delivery
+ *     tags: [Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [booking_id, otp]
+ *             properties:
+ *               booking_id: { type: integer }
+ *               otp: { type: string, example: "123456" }
+ *     responses:
+ *       200: { description: Delivery verified and completed }
+ */
+router.post("/verify-delivery-otp", authenticate, bookingController.verifyDeliveryOtp);
 
 module.exports = router;

@@ -5,8 +5,8 @@ const authenticate = require("../../middleware/authenticate"); // or authMiddlew
 
 /**
  * @swagger
- * /api/wallet:
- *   get:
+ * /api/wallet/fetch-wallet-details:
+ *   post:
  *     summary: Get wallet details
  *     description: >
  *       Returns the authenticated user's wallet balance,
@@ -136,6 +136,6 @@ const authenticate = require("../../middleware/authenticate"); // or authMiddlew
  *                   type: string
  *                   example: Unable to fetch wallet
  */
-router.get("/", authenticate, walletController.getWallet);
+router.post("/fetch-wallet-details", authenticate, walletController.getWallet);
 
 module.exports = router;

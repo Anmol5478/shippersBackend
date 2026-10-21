@@ -64,8 +64,8 @@ exports.getBooking = async (
   try {
     const data =
       await bookingService.getBooking({
-        bookingId:
-          req.params.bookingId,
+        bookingId: req.body?.booking_id,
+        userId: req.user?.user_id,
       });
 
 
@@ -202,3 +202,60 @@ exports.cancelBooking = async (
 };
 
 
+
+
+exports.uploadPickupProof = async (req, res) => {
+  try {
+    const data = await bookingService.uploadStageProof({
+      bookingId: req.params.bookingId,
+      userId: req.user?.user_id,
+      stage: "pickup",
+      file: req.file,
+    });
+    return res.status(200).json({ responseCode: "00", success: true, message: data.message, data });
+  } catch (error) {
+    return res.status(400).json({ responseCode: "01", success: false, message: error.message });
+  }
+};
+
+exports.uploadDeliveryProof = async (req, res) => {
+  try {
+    const data = await bookingService.uploadStageProof({
+      bookingId: req.params.bookingId,
+      userId: req.user?.user_id,
+      stage: "delivery",
+      file: req.file,
+    });
+    return res.status(200).json({ responseCode: "00", success: true, message: data.message, data });
+  } catch (error) {
+    return res.status(400).json({ responseCode: "01", success: false, message: error.message });
+  }
+};
+
+exports.verifyPickupOtp = async (req, res) => {
+  try {
+    const data = await bookingService.verifyStageOtp({
+      bookingId: req.body?.booking_id,
+      userId: req.user?.user_id,
+      stage: "pickup",
+      otp: req.body?.otp,
+    });
+    return res.status(200).json({ responseCode: "00", success: true, message: "Pickup OTP verified. Ride can start.", data });
+  } catch (error) {
+    return res.status(400).json({ responseCode: "01", success: false, message: error.message });
+  }
+};
+
+exports.verifyDeliveryOtp = async (req, res) => {
+  try {
+    const data = await bookingService.verifyStageOtp({
+      bookingId: req.body?.booking_id,
+      userId: req.user?.user_id,
+      stage: "delivery",
+      otp: req.body?.otp,
+    });
+    return res.status(200).json({ responseCode: "00", success: true, message: "Delivery OTP verified. Delivery completed.", data });
+  } catch (error) {
+    return res.status(400).json({ responseCode: "01", success: false, message: error.message });
+  }
+};

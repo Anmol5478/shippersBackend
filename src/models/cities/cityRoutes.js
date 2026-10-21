@@ -1,28 +1,25 @@
 const express = require("express");
+const { searchCities } = require("./cityController");
 const router = express.Router();
-const {
-  searchCities,
-} = require("./cityController");
-
 
 /**
  * @swagger
- * /api/cities/search:
- *   get:
- *     summary: Search cities
- *     tags:
- *       - Cities
- *     parameters:
- *       - in: query
- *         name: search
- *         required: false
- *         schema:
- *           type: string
- *         description: City name to search
+ * /api/cities/search-cities:
+ *   post:
+ *     summary: Search cities by name
+ *     tags: [Cities]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               search:
+ *                 type: string
+ *                 example: Ghaziabad
  *     responses:
  *       200:
- *         description: List of cities
+ *         description: City list
  */
-router.get("/search", searchCities);
-
+router.post("/search-cities", searchCities);
 module.exports = router;

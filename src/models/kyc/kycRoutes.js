@@ -104,8 +104,8 @@ router.post(
 
 /**
  * @swagger
- * /api/kyc/status:
- *   get:
+ * /api/kyc/fetch-status:
+ *   post:
  *     summary: Get current user's KYC status
  *     description: Returns the authenticated user's KYC status and indicates which required documents have been uploaded.
  *     tags:
@@ -164,8 +164,8 @@ router.post(
  *       500:
  *         description: Internal server error
  */
-router.get(
-  "/status",
+router.post(
+  "/fetch-status",
   authenticate,
   kycController.getStatus
 );

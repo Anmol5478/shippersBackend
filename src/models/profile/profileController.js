@@ -11,8 +11,15 @@ exports.getProfile = async (
   res
 ) => {
   try {
-    const { user_id } =
-      req.params;
+    const requestedUserId = req.body?.user_id || req.user?.user_id;
+    const authenticatedUserId = req.user?.user_id;
+    if (!authenticatedUserId) {
+      return res.status(401).json({ responseCode: "01", success: false, message: "Authentication required" });
+    }
+    if (String(requestedUserId) !== String(authenticatedUserId)) {
+      return res.status(403).json({ responseCode: "01", success: false, message: "You can only fetch your own profile" });
+    }
+    const user_id = authenticatedUserId;
 
     const data =
       await profileService.getProfile(
@@ -48,8 +55,7 @@ exports.updateProfileImage = async (
   res
 ) => {
   try {
-    const { user_id } =
-      req.params;
+    const user_id = req.body?.user_id || req.user?.user_id;
 
     const { profile_image } =
       req.body;

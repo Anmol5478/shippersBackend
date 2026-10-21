@@ -14,8 +14,9 @@ const uploadToR2 = async ({
   buffer,
   rideId,
   documentType,
+  namespace = "rides",
 }) => {
-  const key = `rides/${rideId}/${documentType}-${Date.now()}.webp`;
+  const key = `${namespace}/${rideId}/${documentType}-${Date.now()}.webp`;
 
   const command = new PutObjectCommand({
     Bucket: process.env.R2_BUCKET_NAME,
