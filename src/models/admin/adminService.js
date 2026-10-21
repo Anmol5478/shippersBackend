@@ -213,27 +213,40 @@ const checkPnr = async (pnr) => {
     result.source = "rapidapi";
     result.raw = body;
 
-    // Map common field names from this API family
+    // Map common field names across RapidAPI PNR variants
+    // (including real-time-pnr-status-api shape with trainNum / stationFrom / passengerDetailsDTO)
     result.status =
       body.Status ||
       body.status ||
       body.ChartStatus ||
+      body.chartStts ||
       body.pnr_status ||
       body.CurrentStatus ||
+      body.errorMsg ||
       null;
 
     const trainNo =
-      body.TrainNo || body.TrainNumber || body.train_number || body.trainNumber;
+      body.TrainNo ||
+      body.TrainNumber ||
+      body.trainNum ||
+      body.train_number ||
+      body.trainNumber ||
+      null;
     const trainName =
-      body.TrainName || body.train_name || body.trainName || "";
+      body.TrainName ||
+      body.trainName ||
+      body.train_name ||
+      "";
     result.train = trainNo
-      ? `${trainNo} ${trainName}`.trim()
+      ? `${trainNo}${trainName ? ` - ${trainName}` : ""}`.trim()
       : trainName || null;
 
     result.from =
       body.From ||
       body.SourceStation ||
+      body.stationFrom ||
       body.BoardingPoint ||
+      body.boardingPoint ||
       body.from ||
       body.source ||
       null;
@@ -241,33 +254,63 @@ const checkPnr = async (pnr) => {
     result.to =
       body.To ||
       body.DestinationStation ||
+      body.stationTo ||
+      body.reservationUpTo ||
       body.to ||
       body.destination ||
       null;
 
-    result.journey_date =
+    const depRaw =
       body.Doj ||
       body.JourneyDate ||
       body.DepartureDate ||
+      body.departureDate ||
       body.journey_date ||
       body.date ||
       null;
+    result.journey_date = depRaw
+      ? String(depRaw).split(/\s+/)[0] // "23-12-2023  22:05" → "23-12-2023"
+      : null;
 
-    result.chart_prepared =
-      body.ChartPrepared ?? body.chartPrepared ?? body.chart_prepared ?? null;
+    const chartRaw =
+      body.ChartPrepared ??
+      body.chartPrepared ??
+      body.chart_prepared ??
+      body.chartStts ??
+      null;
+    if (typeof chartRaw === "boolean") {
+      result.chart_prepared = chartRaw;
+    } else if (chartRaw != null) {
+      const s = String(chartRaw).toUpperCase();
+      result.chart_prepared =
+        s === "CHART PREPARED" || s === "YES" || s === "TRUE" || s === "1";
+    }
 
     const passengers =
       body.PassengerStatus ||
       body.Passengers ||
+      body.passengerDetailsDTO ||
       body.passenger ||
       body.passengers ||
       [];
     if (Array.isArray(passengers)) {
-      result.passengers = passengers;
+      result.passengers = passengers.map((p) => ({
+        name: p.displayName || p.name || p.Name || "Passenger",
+        status: p.seatStts || p.CurrentStatus || p.status || p.BookingStatus || "—",
+        coach: p.coachNo || p.Coach || p.coach || "—",
+        seat: p.seatNo || p.Berth || p.seat || "—",
+        quota: p.quotaCode || p.Quota || p.quota || "—",
+        age: p.age ?? p.Age ?? null,
+        gender: p.gender || p.Gender || null,
+      }));
     } else if (passengers && typeof passengers === "object") {
       result.passengers = [passengers];
     }
 
+    // Prefer chart status as overall status when no booking-level status
+    if (!result.status && result.chart_prepared != null) {
+      result.status = result.chart_prepared ? "CHART PREPARED" : "CHART NOT PREPARED";
+    }
     // Some responses nest under "name" or similar
     if (!result.status && body.name) {
       result.status = body.name;
@@ -280,12 +323,27 @@ const checkPnr = async (pnr) => {
   return result;
 };
 
+
+const changeUserRole = async ({ userId, role, adminUserId }) => {
+  if (!userId) throw new Error("user_id is required");
+  const r = Number(role);
+  if (![1, 2, 3].includes(r)) {
+    throw new Error("Invalid role. Use 1=Driver, 2=Customer, 3=Admin");
+  }
+  // Prevent removing the last admin accidentally is hard without count; block self-demote
+  if (adminUserId && String(userId) === String(adminUserId) && r !== 3) {
+    throw new Error("You cannot change your own role away from Admin");
+  }
+  return adminRepository.setUserRole(userId, r);
+};
+
 module.exports = {
   getDashboard,
   listUsers,
   getUser,
   blockUser,
   unblockUser,
+  changeUserRole,
   listKyc,
   getKyc,
   approveKyc,

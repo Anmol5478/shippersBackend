@@ -13,6 +13,7 @@ router.post("/users", adminController.listUsers);
 router.post("/users/detail", adminController.getUser);
 router.post("/users/block", adminController.blockUser);
 router.post("/users/unblock", adminController.unblockUser);
+router.post("/users/role", adminController.changeUserRole);
 
 router.post("/kyc", adminController.listKyc);
 router.post("/kyc/detail", adminController.getKyc);

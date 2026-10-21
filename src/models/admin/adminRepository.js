@@ -456,11 +456,26 @@ const getBookingDetail = async (bookingId) => {
   return { ...b, pickup_proof_url, delivery_proof_url };
 };
 
+
+const setUserRole = async (userId, role) => {
+  const r = Number(role);
+  if (![1, 2, 3].includes(r)) {
+    throw new Error("Invalid role. Use 1=Driver, 2=Customer, 3=Admin");
+  }
+  const [result] = await db.execute(
+    "UPDATE users SET role = ? WHERE user_id = ?",
+    [r, userId]
+  );
+  if (!result.affectedRows) throw new Error("User not found");
+  return getUserById(userId);
+};
+
 module.exports = {
   getDashboardStats,
   listUsers,
   getUserById,
   setUserBlocked,
+  setUserRole,
   listKyc,
   getKycByUserId,
   getKycWithUrls,

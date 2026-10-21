@@ -257,12 +257,36 @@ const checkPnr = async (req, res) => {
   }
 };
 
+
+const changeUserRole = async (req, res) => {
+  try {
+    const { user_id: userId, role } = req.body || {};
+    const data = await adminService.changeUserRole({
+      userId,
+      role,
+      adminUserId: req.user?.user_id,
+    });
+    return res.status(200).json({
+      success: true,
+      message: "User role updated",
+      data,
+    });
+  } catch (error) {
+    console.error("Admin change role error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to change role",
+    });
+  }
+};
+
 module.exports = {
   getDashboard,
   listUsers,
   getUser,
   blockUser,
   unblockUser,
+  changeUserRole,
   listKyc,
   getKyc,
   approveKyc,
