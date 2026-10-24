@@ -3,7 +3,37 @@ const multer = require("multer");
 const router = express.Router();
 const bookingController = require("./bookingController");
 const authenticate = require("../../middleware/authenticate");
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+/**
+ * Accept proof image under common field names so Postman / mobile clients
+ * that send "file" or "image" still work. Preferred field: proofImage.
+ */
+const proofUpload = (req, res, next) => {
+  upload.fields([
+    { name: "proofImage", maxCount: 1 },
+    { name: "file", maxCount: 1 },
+    { name: "image", maxCount: 1 },
+  ])(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        responseCode: "01",
+        success: false,
+        message: err.message || "Invalid image upload",
+      });
+    }
+    const files = req.files || {};
+    req.file =
+      (files.proofImage && files.proofImage[0]) ||
+      (files.file && files.file[0]) ||
+      (files.image && files.image[0]) ||
+      undefined;
+    next();
+  });
+};
 
 /** @swagger
  * tags:
@@ -125,7 +155,7 @@ router.patch("/:bookingId/cancel", authenticate, bookingController.cancelBooking
  *     responses:
  *       200: { description: Image uploaded; OTP is not included in response }
  */
-router.post("/:bookingId/pickup-proof", authenticate, upload.single("proofImage"), bookingController.uploadPickupProof);
+router.post("/:bookingId/pickup-proof", authenticate, proofUpload, bookingController.uploadPickupProof);
 
 /** @swagger
  * /api/bookings/{bookingId}/delivery-proof:
@@ -150,7 +180,7 @@ router.post("/:bookingId/pickup-proof", authenticate, upload.single("proofImage"
  *     responses:
  *       200: { description: Image uploaded; OTP is not included in response }
  */
-router.post("/:bookingId/delivery-proof", authenticate, upload.single("proofImage"), bookingController.uploadDeliveryProof);
+router.post("/:bookingId/delivery-proof", authenticate, proofUpload, bookingController.uploadDeliveryProof);
 
 /** @swagger
  * /api/bookings/verify-pickup-otp:
