@@ -5,6 +5,8 @@ const saveResetToken = async (
   token,
   expiry
 ) => {
+  // Always insert a new row so admin can see full history of requests.
+  // (Requires otp.email NOT to be UNIQUE — see MIGRATION.sql)
   await db.query(
     `
     INSERT INTO otp (
@@ -15,12 +17,6 @@ const saveResetToken = async (
       created_at
     )
     VALUES (?, ?, ?, FALSE, NOW())
-
-    ON DUPLICATE KEY UPDATE
-      token = VALUES(token),
-      expires_at = VALUES(expires_at),
-      is_used = FALSE,
-      created_at = NOW()
     `,
     [email, token, expiry]
   );

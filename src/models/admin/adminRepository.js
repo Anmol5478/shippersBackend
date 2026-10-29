@@ -498,6 +498,8 @@ const listPasswordResets = async ({ search, status, page = 1, limit = 20 } = {})
     params.push(q, q, q);
   }
 
+  // Optional status filter applied on the *latest* attempt per email
+  // We filter emails that have at least one matching attempt when status is set.
   if (status === "pending") {
     conditions.push("o.is_used = FALSE AND o.expires_at > NOW()");
   } else if (status === "used") {
@@ -508,9 +510,10 @@ const listPasswordResets = async ({ search, status, page = 1, limit = 20 } = {})
 
   const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 
+  // Distinct emails matching filters (pagination by user/email)
   const [countRows] = await db.query(
     `
-    SELECT COUNT(*) AS total
+    SELECT COUNT(DISTINCT o.email) AS total
     FROM otp o
     LEFT JOIN users u ON u.email = o.email
     ${where}
@@ -518,6 +521,26 @@ const listPasswordResets = async ({ search, status, page = 1, limit = 20 } = {})
     params
   );
   const total = Number(countRows[0]?.total || 0);
+
+  const [emailRows] = await db.query(
+    `
+    SELECT o.email
+    FROM otp o
+    LEFT JOIN users u ON u.email = o.email
+    ${where}
+    GROUP BY o.email
+    ORDER BY MAX(o.created_at) DESC
+    LIMIT ? OFFSET ?
+    `,
+    [...params, limit, offset]
+  );
+
+  if (!emailRows.length) {
+    return { groups: [], total, page, limit };
+  }
+
+  const emails = emailRows.map((r) => r.email);
+  const placeholders = emails.map(() => "?").join(",");
 
   const [rows] = await db.query(
     `
@@ -538,14 +561,46 @@ const listPasswordResets = async ({ search, status, page = 1, limit = 20 } = {})
       END AS status
     FROM otp o
     LEFT JOIN users u ON u.email = o.email
-    ${where}
-    ORDER BY o.created_at DESC
-    LIMIT ? OFFSET ?
+    WHERE o.email IN (${placeholders})
+    ORDER BY o.email ASC, o.created_at DESC
     `,
-    [...params, limit, offset]
+    emails
   );
 
-  return { resets: rows, total, page, limit };
+  // Group attempts under each email (newest first)
+  const byEmail = new Map();
+  for (const row of rows) {
+    if (!byEmail.has(row.email)) {
+      byEmail.set(row.email, {
+        email: row.email,
+        user_id: row.user_id,
+        full_name: row.full_name,
+        phone: row.phone,
+        role: row.role,
+        attempt_count: 0,
+        latest_status: row.status,
+        latest_created_at: row.created_at,
+        latest_expires_at: row.expires_at,
+        attempts: [],
+      });
+    }
+    const g = byEmail.get(row.email);
+    g.attempts.push({
+      id: row.id,
+      status: row.status,
+      is_used: row.is_used,
+      created_at: row.created_at,
+      expires_at: row.expires_at,
+    });
+    g.attempt_count = g.attempts.length;
+  }
+
+  // Preserve order of emails from the paginated query
+  const groups = emails
+    .map((e) => byEmail.get(e))
+    .filter(Boolean);
+
+  return { groups, total, page, limit };
 };
 
 module.exports.listPasswordResets = listPasswordResets;
