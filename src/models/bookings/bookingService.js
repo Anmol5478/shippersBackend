@@ -367,16 +367,9 @@ const uploadStageProof = async ({ bookingId, userId, stage, file }) => {
   const id = Number(bookingId);
   if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid booking ID");
   if (!userId) throw new Error("Authenticated user is required");
-  if (!file || !file.buffer) {
-    throw new Error(
-      "A proof image is required. Send multipart/form-data with field name proofImage (or file / image)."
-    );
-  }
-  const mime = String(file.mimetype || "").toLowerCase();
-  if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mime)) {
-    throw new Error(
-      `Only JPG, PNG and WEBP images are allowed. Received: ${file.mimetype || "unknown"}`
-    );
+  if (!file?.buffer) throw new Error("A proof image is required");
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+    throw new Error("Only JPG, PNG and WEBP images are allowed");
   }
   if (file.size > 10 * 1024 * 1024) throw new Error("Image must not exceed 10 MB");
   const normalizedStage = String(stage || "").toLowerCase();

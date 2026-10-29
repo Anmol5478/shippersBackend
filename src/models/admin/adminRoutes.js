@@ -30,4 +30,7 @@ router.post("/bookings/detail", adminController.getBooking);
 
 router.post("/pnr/check", adminController.checkPnr);
 
+router.post("/password-resets", adminController.listPasswordResets);
+router.post("/password-resets/resend", adminController.resendPasswordReset);
+
 module.exports = router;

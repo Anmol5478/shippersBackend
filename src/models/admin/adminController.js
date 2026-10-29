@@ -280,6 +280,37 @@ const changeUserRole = async (req, res) => {
   }
 };
 
+const listPasswordResets = async (req, res) => {
+  try {
+    const data = await adminService.listPasswordResets(req.body || {});
+    return res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error("Admin list password resets error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to list password resets",
+    });
+  }
+};
+
+const resendPasswordReset = async (req, res) => {
+  try {
+    const email = req.body?.email;
+    const data = await adminService.resendPasswordReset(email);
+    return res.status(200).json({
+      success: true,
+      message: "Password reset email sent successfully via Brevo",
+      data,
+    });
+  } catch (error) {
+    console.error("Admin resend password reset error:", error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Unable to resend password reset email",
+    });
+  }
+};
+
 module.exports = {
   getDashboard,
   listUsers,
@@ -298,4 +329,6 @@ module.exports = {
   listBookings,
   getBooking,
   checkPnr,
+  listPasswordResets,
+  resendPasswordReset,
 };

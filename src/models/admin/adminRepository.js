@@ -486,3 +486,66 @@ module.exports = {
   listBookings,
   getBookingDetail,
 };
+
+const listPasswordResets = async ({ search, status, page = 1, limit = 20 } = {}) => {
+  const offset = (Math.max(1, page) - 1) * limit;
+  const conditions = [];
+  const params = [];
+
+  if (search && String(search).trim()) {
+    const q = "%" + String(search).trim() + "%";
+    conditions.push("(o.email LIKE ? OR u.full_name LIKE ? OR u.user_id LIKE ?)");
+    params.push(q, q, q);
+  }
+
+  if (status === "pending") {
+    conditions.push("o.is_used = FALSE AND o.expires_at > NOW()");
+  } else if (status === "used") {
+    conditions.push("o.is_used = TRUE");
+  } else if (status === "expired") {
+    conditions.push("o.is_used = FALSE AND o.expires_at <= NOW()");
+  }
+
+  const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
+
+  const [countRows] = await db.query(
+    `
+    SELECT COUNT(*) AS total
+    FROM otp o
+    LEFT JOIN users u ON u.email = o.email
+    ${where}
+    `,
+    params
+  );
+  const total = Number(countRows[0]?.total || 0);
+
+  const [rows] = await db.query(
+    `
+    SELECT
+      o.id,
+      o.email,
+      o.expires_at,
+      o.is_used,
+      o.created_at,
+      u.user_id,
+      u.full_name,
+      u.phone,
+      u.role,
+      CASE
+        WHEN o.is_used = TRUE THEN 'used'
+        WHEN o.expires_at <= NOW() THEN 'expired'
+        ELSE 'pending'
+      END AS status
+    FROM otp o
+    LEFT JOIN users u ON u.email = o.email
+    ${where}
+    ORDER BY o.created_at DESC
+    LIMIT ? OFFSET ?
+    `,
+    [...params, limit, offset]
+  );
+
+  return { resets: rows, total, page, limit };
+};
+
+module.exports.listPasswordResets = listPasswordResets;

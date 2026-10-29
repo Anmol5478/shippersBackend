@@ -337,6 +337,27 @@ const changeUserRole = async ({ userId, role, adminUserId }) => {
   return adminRepository.setUserRole(userId, r);
 };
 
+const forgotPasswordService = require("../forgotpassword/forgotPasswordService");
+
+const listPasswordResets = async (query) => {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+  return adminRepository.listPasswordResets({
+    search: query.search,
+    status: query.status,
+    page,
+    limit,
+  });
+};
+
+const resendPasswordReset = async (email) => {
+  if (!email || !String(email).trim()) {
+    throw new Error("email is required");
+  }
+  await forgotPasswordService.forgotPassword(String(email).trim().toLowerCase());
+  return { email: String(email).trim().toLowerCase() };
+};
+
 module.exports = {
   getDashboard,
   listUsers,
@@ -355,4 +376,6 @@ module.exports = {
   listBookings,
   getBooking,
   checkPnr,
+  listPasswordResets,
+  resendPasswordReset,
 };
