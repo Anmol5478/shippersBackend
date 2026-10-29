@@ -294,6 +294,39 @@ const createRide = async ({ userId, body, files }) => {
     throw new Error("Departure time is required");
   }
 
+  // Strict timing: travel date+time must be in the future
+  {
+    const dateStr = String(travel_date).trim();
+    const timeStr = String(departure_time).trim();
+    // Accept HH:mm or HH:mm:ss
+    const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !timeMatch) {
+      throw new Error("Invalid travel date or departure time format");
+    }
+    const hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    if (
+      !Number.isFinite(hours) ||
+      !Number.isFinite(minutes) ||
+      hours < 0 ||
+      hours > 23 ||
+      minutes < 0 ||
+      minutes > 59
+    ) {
+      throw new Error("Invalid departure time");
+    }
+    const departure = new Date(`${dateStr}T00:00:00`);
+    if (Number.isNaN(departure.getTime())) {
+      throw new Error("Invalid travel date");
+    }
+    departure.setHours(hours, minutes, 0, 0);
+    if (departure.getTime() <= Date.now()) {
+      throw new Error(
+        "Travel date and departure time must be in the future"
+      );
+    }
+  }
+
   const pickupLat = Number(pickup_latitude);
   const pickupLng = Number(pickup_longitude);
   const dropLat = Number(drop_latitude);
