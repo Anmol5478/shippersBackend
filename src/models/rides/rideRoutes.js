@@ -227,7 +227,9 @@ router.post(
  *       Accepts or rejects a pending booking received on a ride.
  *       Only the driver/user who published the ride can perform this action.
  *       The driver ID is taken from the authenticated JWT; it must not be sent
- *       by the client.
+ *       by the client. Confirming a BUSINESS booking requires an uploaded
+ *       active purchase bill from the booking sender; PERSONAL bookings do
+ *       not require a bill. Rejection does not require a bill.
  *     tags:
  *       - Rides
  *     security:
@@ -262,6 +264,12 @@ router.post(
  *         description: Invalid booking status or booking is not pending
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Caller does not own the ride
+ *       404:
+ *         description: Booking not found
+ *       409:
+ *         description: Business purchase bill is missing or invalid
  */
 router.patch(
   "/bookings/:bookingId/status",

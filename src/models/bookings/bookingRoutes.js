@@ -37,6 +37,22 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
  *               notes: { type: string }
  *               payment_method: { type: string, enum: [CASH, UPI, ONLINE] }
  *               payment_collection_point: { type: string, enum: [PICKUP, DROP] }
+ *               shipment_type: { type: string, enum: [PERSONAL, BUSINESS], default: PERSONAL }
+ *               enterprise_profile_id: { type: integer, nullable: true }
+ *               business_details_snapshot:
+ *                 type: object
+ *                 description: Required with company_name for a one-time BUSINESS shipment when no enterprise profile is selected.
+ *                 properties:
+ *                   company_name: { type: string }
+ *                   billing_email: { type: string, format: email }
+ *                   gstin: { type: string, nullable: true }
+ *                   pan_number: { type: string, nullable: true }
+ *                   contact_person: { type: string }
+ *                   contact_phone: { type: string }
+ *                   billing_address: { type: string }
+ *                   billing_city: { type: string }
+ *                   billing_state: { type: string }
+ *                   billing_pincode: { type: string }
  *     responses:
  *       201: { description: Booking created; no OTP generated }
  *       400: { description: Invalid booking request }
@@ -101,7 +117,51 @@ router.post("/fetch-booking-details", authenticate, bookingController.getBooking
  *       200: { description: Booking cancelled }
  */
 router.patch("/:bookingId/cancel", authenticate, bookingController.cancelBooking);
+
+/**
+ * @swagger
+ * /api/bookings/confirm-booking:
+ *   post:
+ *     summary: Confirm a pending booking as its sender
+ *     description: BUSINESS bookings require an uploaded active purchase bill; PERSONAL bookings do not.
+ *     tags: [Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [booking_id]
+ *             properties:
+ *               booking_id: { type: integer, example: 104 }
+ *     responses:
+ *       200: { description: Booking confirmed }
+ *       400: { description: Invalid booking or invalid current state }
+ *       403: { description: User is not the booking sender }
+ *       404: { description: Booking not found }
+ */
 router.post("/confirm-booking", authenticate, bookingController.confirmBooking);
+
+/**
+ * @swagger
+ * /api/bookings/{bookingId}/confirm:
+ *   patch:
+ *     summary: Confirm a pending booking as its sender
+ *     description: BUSINESS bookings require an uploaded active purchase bill; PERSONAL bookings do not.
+ *     tags: [Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Booking confirmed }
+ *       400: { description: Invalid booking or invalid current state }
+ *       403: { description: User is not the booking sender }
+ *       404: { description: Booking not found }
+ */
 router.patch("/:bookingId/confirm", authenticate, bookingController.confirmBooking);
 
 /** @swagger
