@@ -112,37 +112,39 @@ const updateCampaignResult = async ({ campaignId, pushAttemptedCount, pushAccept
 
 
 
-const listCampaigns = async ({ page = 1, limit = 10 }) => {
-  // Convert query parameters to valid integers
+const listCampaigns = async ({ page = 1, limit = 10 } = {}) => {
   const currentPage = Math.max(1, parseInt(page, 10) || 1);
   const pageLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
 
   const offset = (currentPage - 1) * pageLimit;
 
-  const [countRows] = await db.execute(
-    `SELECT COUNT(*) AS total
-     FROM admin_notification_campaigns`
-  );
+  const [countRows] = await db.execute(`
+    SELECT COUNT(*) AS total
+    FROM admin_notification_campaigns
+  `);
 
-  const [rows] = await db.execute(
-    `SELECT
-        id,
-        title,
-        message,
-        notification_type,
-        audience,
-        created_by,
-        recipient_count,
-        push_attempted_count,
-        push_accepted_count,
-        status,
-        created_at,
-        completed_at
-     FROM admin_notification_campaigns
-     ORDER BY id DESC
-     LIMIT ? OFFSET ?`,
-    [pageLimit, offset]
-  );
+  // Use db.query instead of db.execute for pagination.
+  // Both values are validated integers.
+  const sql = `
+    SELECT
+      id,
+      title,
+      message,
+      notification_type,
+      audience,
+      created_by,
+      recipient_count,
+      push_attempted_count,
+      push_accepted_count,
+      status,
+      created_at,
+      completed_at
+    FROM admin_notification_campaigns
+    ORDER BY id DESC
+    LIMIT ${pageLimit} OFFSET ${offset}
+  `;
+
+  const [rows] = await db.query(sql);
 
   return {
     campaigns: rows,
