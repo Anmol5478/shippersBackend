@@ -17,6 +17,7 @@ const kycRoutes = require("./models/kyc/kycRoutes");
 const rideRoutes = require("./models/rides/rideRoutes");
 const profileRoutes = require("./models/profile/profileRoutes");
 const bookingRoutes = require("./models/bookings/bookingRoutes");
+const enterpriseRoutes = require("./models/enterprise/enterpriseRoutes");
 const walletRoutes = require("./models/wallet/walletRoutes");
 const adminRoutes = require("./models/admin/adminRoutes");
 
@@ -36,6 +37,7 @@ app.use("/api/kyc", kycRoutes);
 app.use("/api/rides", rideRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/enterprise", enterpriseRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

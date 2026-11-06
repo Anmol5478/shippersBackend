@@ -38,17 +38,25 @@ exports.createBooking = async (
     });
 
   } catch (error) {
+    if (error?.code || error?.$metadata || error?.$fault) {
+      console.error("createBooking controller error:", error);
+      return res.status(500).json({
+        responseCode: "01",
+        success: false,
+        message: "An internal error occurred",
+      });
+    }
 
-    console.error(
-      "createBooking controller error:",
-      error
-    );
+    const message = error?.message || "Invalid request";
+    let status = 400;
+    if (message === "Authenticated user is required") status = 401;
+    else if (/not allowed|does not belong to you/i.test(message)) status = 403;
+    else if (/not found/i.test(message)) status = 404;
 
-    return res.status(400).json({
+    return res.status(status).json({
       responseCode: "01",
       success: false,
-      message:
-        error.message,
+      message,
     });
   }
 };
@@ -201,8 +209,36 @@ exports.cancelBooking = async (
   }
 };
 
+exports.confirmBooking = async (req, res) => {
+  try {
+    const bookingId = req.body?.booking_id ?? req.params?.bookingId ?? req.query?.booking_id;
+    const data = await bookingService.confirmBooking({
+      bookingId,
+      userId: req.user?.user_id,
+    });
 
+    return res.status(200).json({
+      responseCode: "00",
+      success: true,
+      message: "Booking confirmed successfully",
+      data,
+    });
+  } catch (error) {
+    if (error?.code || error?.$metadata || error?.$fault) {
+      console.error("confirmBooking controller error:", error);
+      return res.status(500).json({ responseCode: "01", success: false, message: "An internal error occurred" });
+    }
 
+    const message = error?.message || "Invalid request";
+    let status = 400;
+    if (message === "Authenticated user is required") status = 401;
+    else if (/not allowed/i.test(message)) status = 403;
+    else if (/not found/i.test(message)) status = 404;
+    else if (/already confirmed|cannot be confirmed|requires an uploaded purchase bill|no active purchase bill|status changed/i.test(message)) status = 409;
+
+    return res.status(status).json({ responseCode: "01", success: false, message });
+  }
+};
 
 exports.uploadPickupProof = async (req, res) => {
   try {

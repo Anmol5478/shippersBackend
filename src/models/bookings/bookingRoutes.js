@@ -101,6 +101,8 @@ router.post("/fetch-booking-details", authenticate, bookingController.getBooking
  *       200: { description: Booking cancelled }
  */
 router.patch("/:bookingId/cancel", authenticate, bookingController.cancelBooking);
+router.post("/confirm-booking", authenticate, bookingController.confirmBooking);
+router.patch("/:bookingId/confirm", authenticate, bookingController.confirmBooking);
 
 /** @swagger
  * /api/bookings/{bookingId}/pickup-proof:

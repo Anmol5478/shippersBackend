@@ -3,6 +3,7 @@ const sharp = require("sharp");
 const db = require("../../config/db");
 const { uploadToR2, deleteFromR2 } = require("../rides/rideProofStorage");
 const bookingRepository = require("./bookingRepository");
+const enterpriseRepository = require("../enterprise/enterpriseRepository");
 const { assertUserNotBlocked } = require("../../utils/userStatus");
 
 const PAYMENT_METHODS = ["CASH", "UPI", "ONLINE"];
@@ -71,7 +72,57 @@ const createBooking = async ({ userId, body }) => {
     notes,
     payment_method,
     payment_collection_point,
+    shipment_type,
+    enterprise_profile_id,
+    business_details_snapshot,
   } = body;
+
+  const normalizedShipmentType = String(shipment_type || "PERSONAL")
+    .trim()
+    .toUpperCase();
+
+  if (!["PERSONAL", "BUSINESS"].includes(normalizedShipmentType)) {
+    throw new Error("Shipment type must be PERSONAL or BUSINESS");
+  }
+
+  const parsedEnterpriseProfileId = enterprise_profile_id
+    ? Number(enterprise_profile_id)
+    : null;
+
+  if (
+    parsedEnterpriseProfileId !== null &&
+    (!Number.isInteger(parsedEnterpriseProfileId) || parsedEnterpriseProfileId <= 0)
+  ) {
+    throw new Error("Selected enterprise profile is invalid");
+  }
+
+  const normalizeBusinessSnapshot = (payload) => {
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+
+    const companyName = payload.company_name ?? payload.companyName;
+    const normalized = {
+      company_name: companyName == null ? null : String(companyName).trim() || null,
+      billing_email: payload.billing_email || payload.billingEmail || null,
+      gstin: payload.gstin || null,
+      pan_number: payload.pan_number || payload.panNumber || null,
+      contact_person: payload.contact_person || payload.contactPerson || null,
+      contact_phone: payload.contact_phone || payload.contactPhone || null,
+      billing_address: payload.billing_address || payload.billingAddress || null,
+      billing_city: payload.billing_city || payload.billingCity || null,
+      billing_state: payload.billing_state || payload.billingState || null,
+      billing_pincode: payload.billing_pincode || payload.billingPincode || null,
+    };
+
+    return Object.fromEntries(
+      Object.entries(normalized).filter(([, value]) => value !== null && value !== undefined)
+    );
+  };
+
+  const finalBusinessDetails = normalizeBusinessSnapshot(
+    business_details_snapshot || null
+  );
 
   // ==========================================
   // BASIC VALIDATION
@@ -147,6 +198,61 @@ const createBooking = async ({ userId, body }) => {
 
   if (notes && String(notes).length > 500) {
     throw new Error("Notes cannot exceed 500 characters");
+  }
+
+  let selectedEnterpriseProfileId = null;
+  let selectedEnterpriseProfile = null;
+  let finalBusinessSnapshot = null;
+  let finalPurchaseBillStatus = "NOT_REQUIRED";
+
+  if (normalizedShipmentType === "BUSINESS") {
+    if (parsedEnterpriseProfileId !== null) {
+      const profile = await enterpriseRepository.getProfileById(parsedEnterpriseProfileId);
+      if (!profile) {
+        throw new Error("Selected enterprise profile not found");
+      }
+      if (String(profile.user_id) !== String(userId)) {
+        throw new Error("Selected enterprise profile does not belong to you");
+      }
+      selectedEnterpriseProfile = profile;
+      selectedEnterpriseProfileId = profile.id;
+    }
+
+    if (!selectedEnterpriseProfileId && !finalBusinessDetails) {
+      throw new Error("Business details are required when no saved profile is selected");
+    }
+
+    if (selectedEnterpriseProfileId) {
+      finalBusinessSnapshot = normalizeBusinessSnapshot(selectedEnterpriseProfile);
+    } else {
+      finalBusinessSnapshot = finalBusinessDetails;
+      if (!finalBusinessDetails.company_name) {
+        throw new Error("Business company name is required");
+      }
+      if (finalBusinessDetails.billing_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(finalBusinessDetails.billing_email)) {
+        throw new Error("Business billing email is invalid");
+      }
+      if (
+        finalBusinessDetails.contact_phone &&
+        !/^[0-9]{10,15}$/.test(String(finalBusinessDetails.contact_phone))
+      ) {
+        throw new Error("Business contact phone is invalid");
+      }
+      if (
+        finalBusinessDetails.gstin &&
+        !/^[0-9A-Z]{15}$/.test(String(finalBusinessDetails.gstin).trim().toUpperCase())
+      ) {
+        throw new Error("Business GSTIN is invalid");
+      }
+      if (
+        finalBusinessDetails.pan_number &&
+        !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(String(finalBusinessDetails.pan_number).trim().toUpperCase())
+      ) {
+        throw new Error("Business PAN number is invalid");
+      }
+    }
+
+    finalPurchaseBillStatus = "PENDING";
   }
 
   // ==========================================
@@ -246,6 +352,12 @@ const createBooking = async ({ userId, body }) => {
       total_amount: totalAmount,
       payment_method: finalPaymentMethod,
       payment_collection_point: finalPaymentPoint,
+      shipment_type: normalizedShipmentType,
+      enterprise_profile_id: selectedEnterpriseProfileId,
+      business_details_snapshot: finalBusinessSnapshot
+        ? JSON.stringify(finalBusinessSnapshot)
+        : null,
+      purchase_bill_status: finalPurchaseBillStatus,
       pickup_otp: null,
       delivery_otp: null,
     });
@@ -358,6 +470,107 @@ const cancelBooking = async ({ bookingId, userId }) => {
   return bookingRepository.getBookingById(bookingId);
 };
 
+const confirmBooking = async ({ bookingId, userId }) => {
+  if (!userId) {
+    throw new Error("Authenticated user is required");
+  }
+
+  const id = Number(bookingId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Valid booking ID is required");
+  }
+
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [bookingRows] = await connection.execute(
+      `
+        SELECT
+          id,
+          sender_id,
+          booking_status,
+          shipment_type,
+          enterprise_profile_id,
+          purchase_bill_status
+        FROM bookings
+        WHERE id = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [id]
+    );
+
+    const booking = bookingRows[0] || null;
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (String(booking.sender_id) !== String(userId)) {
+      throw new Error("You are not allowed to confirm this booking");
+    }
+
+    if (String(booking.booking_status || "").toUpperCase() === "CONFIRMED") {
+      throw new Error("This booking is already confirmed");
+    }
+
+    const bookingStatus = String(booking.booking_status || "").toUpperCase();
+    if (["CANCELLED", "REJECTED", "DELIVERED", "PICKED_UP", "IN_TRANSIT"].includes(bookingStatus)) {
+      throw new Error("This booking cannot be confirmed in its current state");
+    }
+
+    if (String(booking.shipment_type || "PERSONAL").toUpperCase() === "BUSINESS") {
+      if (booking.purchase_bill_status !== "UPLOADED") {
+        throw new Error("A business booking requires an uploaded purchase bill before confirmation");
+      }
+
+      const [billRows] = await connection.execute(
+        `
+          SELECT id, uploaded_by, status
+          FROM enterprise_bills
+          WHERE booking_id = ?
+            AND status IN ('UPLOADED', 'UNDER_REVIEW', 'APPROVED')
+          ORDER BY uploaded_at DESC
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [id]
+      );
+
+      const activeBill = billRows[0];
+      if (!activeBill) {
+        throw new Error("No active purchase bill exists for this business booking");
+      }
+
+      if (String(activeBill.uploaded_by) !== String(booking.sender_id)) {
+        throw new Error("The active purchase bill does not belong to this booking sender");
+      }
+    }
+
+    const [updateResult] = await connection.execute(
+      `UPDATE bookings SET booking_status = 'CONFIRMED' WHERE id = ? AND booking_status = 'PENDING'`,
+      [id]
+    );
+
+    if (!updateResult.affectedRows) {
+      throw new Error("Booking confirmation failed because the booking status changed");
+    }
+
+    await connection.commit();
+
+    return {
+      booking_id: id,
+      booking_status: "CONFIRMED",
+      message: "Booking confirmed successfully",
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
 
 /**
  * Upload pickup/delivery proof first, then generate the corresponding OTP.
@@ -451,6 +664,7 @@ module.exports = {
   getUserBookings,
   getTravellerBookings,
   cancelBooking,
+  confirmBooking,
   uploadStageProof,
   verifyStageOtp,
 };
