@@ -17,28 +17,75 @@ exports.registerDevice = async (userId, body) => {
   return repo.registerDevice({userId,token,type,name:body.device_name});
 };
 
+
 exports.createAndSend = async (n) => {
   if (!n.userId || !n.title || !n.message || !n.type) return null;
-  const id=await repo.create(n); // Persist inbox notification first.
+
+  // Save notification to the in-app inbox first.
+  const id = await repo.create(n);
+
   try {
-    const prefs=await repo.preferences(n.userId);
-    const pref=preferenceByType[String(n.type).toLowerCase()];
-    if (Number(prefs.push_enabled)!==1 || (pref && Number(prefs[pref])!==1)) return id;
-    const devices=await repo.devices(n.userId);
-    const messages=devices.map(d=>({
-      to:d.expo_push_token, sound:"default", title:n.title, body:n.message,
-      data:{...(n.data || {}),notificationId:id}, priority:"high", channelId:"default"
-    }));
-    for(let i=0;i<messages.length;i+=100) {
-      try {
-        await axios.post("https://exp.host/--/api/v2/push/send",messages.slice(i,i+100),{
-          headers:{"Content-Type":"application/json",Accept:"application/json"},timeout:12000
-        });
-      } catch(e) { console.error("Expo push delivery failed:",e.response?.data || e.message); }
+    const prefs = await repo.preferences(n.userId);
+
+    const pref = preferenceByType[String(n.type).toLowerCase()];
+
+    if (
+      Number(prefs.push_enabled) !== 1 ||
+      (pref && Number(prefs[pref]) !== 1)
+    ) {
+      return id;
     }
-  } catch(e) { console.error("Notification processing failed:",e.message); }
+
+    const devices = await repo.devices(n.userId);
+
+    const messages = devices.map((device) => ({
+      to: device.expo_push_token,
+      sound: "default",
+      title: n.title,
+      body: n.message,
+      data: {
+        ...(n.data || {}),
+        notificationId: id,
+      },
+      priority: "high",
+      channelId: "default",
+    }));
+
+    const receipts = [];
+
+for (let j = 0; j < tickets.length; j++) {
+  const ticket = tickets[j];
+  const token = batch[j]?.to;
+
+  if (ticket?.status === "ok" && ticket.id && token) {
+    receipts.push({
+      userId: n.userId,
+      token,
+      ticketId: ticket.id,
+    });
+  } else if (
+    ticket?.status === "error" &&
+    ticket?.details?.error === "DeviceNotRegistered"
+  ) {
+    if (token) {
+      await repo.deactivateToken(n.userId, token);
+      console.log("Deactivated invalid Expo token");
+    }
+  } else if (ticket?.status === "error") {
+    console.error("Expo ticket error:", ticket.message);
+  }
+}
+
+if (receipts.length > 0) {
+  await repo.savePushReceipts(receipts);
+}
+  } catch (error) {
+    console.error("Notification processing failed:", error.message);
+  }
+
   return id;
 };
+
 exports.unregisterDevice=(userId,id)=>repo.deactivateDevice(userId,id);
 exports.unregisterToken=(userId,token)=>repo.deactivateToken(userId,token);
 exports.getPreferences=(userId)=>repo.preferences(userId);

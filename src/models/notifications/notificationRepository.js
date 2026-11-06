@@ -37,12 +37,47 @@ exports.preferences = async (userId) => {
   return r[0];
 };
 exports.updatePreferences = async (userId, body) => {
-  const allowed=["push_enabled","ride_notifications","booking_notifications","parcel_notifications","payment_notifications","chat_notifications","promotional_notifications"];
-  const keys=allowed.filter(k=>Object.prototype.hasOwnProperty.call(body,k));
-  if (!keys.length) return exports.preferences(userId);
-  const vals=keys.map(k => body[k] ? 1 : 0);
-  await db.execute(`INSERT INTO notification_preferences (user_id) VALUES (?)
-    ON DUPLICATE KEY UPDATE ${keys.map(k=>`${k}=?`).join(",")}`,[userId,...vals]);
+  const allowed = [
+    "push_enabled",
+    "ride_notifications",
+    "booking_notifications",
+    "parcel_notifications",
+    "payment_notifications",
+    "chat_notifications",
+    "promotional_notifications",
+  ];
+
+  const keys = allowed.filter((key) =>
+    Object.prototype.hasOwnProperty.call(body, key)
+  );
+
+  if (!keys.length) {
+    return exports.preferences(userId);
+  }
+
+  const vals = keys.map((key) => {
+    const value = body[key];
+
+    if (value === true || value === 1 || value === "1") return 1;
+    if (value === false || value === 0 || value === "0") return 0;
+
+    throw new Error(`Invalid value for ${key}. Expected 0 or 1.`);
+  });
+
+  const columns = ["user_id", ...keys];
+  const placeholders = columns.map(() => "?").join(", ");
+
+  const updates = keys
+    .map((key) => `${key} = VALUES(${key})`)
+    .join(", ");
+
+  await db.execute(
+    `INSERT INTO notification_preferences (${columns.join(", ")})
+     VALUES (${placeholders})
+     ON DUPLICATE KEY UPDATE ${updates}`,
+    [userId, ...vals]
+  );
+
   return exports.preferences(userId);
 };
 exports.list = async (userId, limit, offset) => {
@@ -92,4 +127,48 @@ exports.markRead = async (userId,id) => {
 exports.markAllRead = async (userId) => {
   const [r]=await db.execute("UPDATE notifications SET is_read=1,read_at=COALESCE(read_at,NOW()) WHERE user_id=? AND is_read=0",[userId]);
   return r.affectedRows;
+};
+
+exports.savePushReceipts = async (receipts) => {
+  if (!Array.isArray(receipts) || receipts.length === 0) return;
+
+  const values = receipts.map((receipt) => [
+    receipt.userId,
+    receipt.token,
+    receipt.ticketId,
+  ]);
+
+  await db.query(
+    `INSERT IGNORE INTO expo_push_receipts
+      (user_id, expo_push_token, ticket_id)
+     VALUES ?`,
+    [values]
+  );
+};
+
+exports.getPendingPushReceipts = async (limit = 1000) => {
+  const safeLimit = Math.min(Math.max(Number(limit) || 1000, 1), 1000);
+
+  const [rows] = await db.query(
+    `SELECT id, user_id, expo_push_token, ticket_id
+     FROM expo_push_receipts
+     WHERE status = 'pending'
+     ORDER BY created_at ASC
+     LIMIT ${safeLimit}`
+  );
+
+  return rows;
+};
+
+exports.markPushReceiptsProcessed = async (ids) => {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+
+  const placeholders = ids.map(() => "?").join(",");
+
+  await db.execute(
+    `UPDATE expo_push_receipts
+     SET status = 'processed', processed_at = NOW()
+     WHERE id IN (${placeholders})`,
+    ids
+  );
 };

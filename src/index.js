@@ -21,6 +21,7 @@ const enterpriseRoutes = require("./models/enterprise/enterpriseRoutes");
 const walletRoutes = require("./models/wallet/walletRoutes");
 const adminRoutes = require("./models/admin/adminRoutes");
 const notificationRoutes = require("./models/notifications/notificationRoutes");
+const {processPendingReceipts} = require("./services/notifications/pushReceiptService");
 
 app.post("/health/database", async (_req, res) => {
   try {
@@ -47,6 +48,35 @@ app.get("/health/ping-server-9x7k", (_req, res) =>
   res.status(200).json({ success: true })
 );
 app.post("/health/ping-server-9x7k", (_req, res) => res.status(200).json({ success: true }));
+// Expo push receipt checker
+let isProcessingReceipts = false;
 
+const runPushReceiptCheck = async () => {
+  if (isProcessingReceipts) return;
+
+  isProcessingReceipts = true;
+
+  try {
+    await processPendingReceipts();
+  } catch (error) {
+    console.error("Push receipt scheduler error:", error.message);
+  } finally {
+    isProcessingReceipts = false;
+  }
+};
+
+const receiptInterval = setInterval(
+  runPushReceiptCheck,
+  15 * 60 * 1000
+);
+
+receiptInterval.unref();
+
+const receiptStartupTimeout = setTimeout(
+  runPushReceiptCheck,
+  30 * 1000
+);
+
+receiptStartupTimeout.unref();
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
