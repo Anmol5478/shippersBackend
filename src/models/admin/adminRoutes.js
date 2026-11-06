@@ -2,6 +2,7 @@ const express = require("express");
 const adminController = require("./adminController");
 const authenticate = require("../../middleware/authenticate");
 const requireAdmin = require("../../middleware/requireAdmin");
+const notificationAdminController = require("./adminNotificationController");
 
 const router = express.Router();
 
@@ -333,6 +334,57 @@ const router = express.Router();
  *     responses:
  *       200: { description: Password reset email sent }
  *       400: { description: Invalid request }
+
+ *
+ * /api/admin/notifications/audience-counts:
+ *   get:
+ *     summary: Get eligible notification audience counts
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Audience counts returned }
+ *       403: { description: Administrator access required }
+ * /api/admin/notifications/campaigns:
+ *   get:
+ *     summary: List admin notification campaigns
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+ *     responses:
+ *       200: { description: Campaign history returned }
+ *       403: { description: Administrator access required }
+ * /api/admin/notifications/send:
+ *   post:
+ *     summary: Send a notification campaign
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, message, audience]
+ *             properties:
+ *               title: { type: string, minLength: 3, maxLength: 100 }
+ *               message: { type: string, minLength: 3, maxLength: 1000 }
+ *               audience:
+ *                 type: string
+ *                 enum: [all, drivers, customers, enterprise]
+ *               notification_type:
+ *                 type: string
+ *                 enum: [announcement, promotion]
+ *                 default: announcement
+ *     responses:
+ *       201: { description: Campaign created and notification inbox entries saved }
+ *       400: { description: Invalid campaign request }
+ *       403: { description: Administrator access required }
  */
 router.use(authenticate, requireAdmin);
 
@@ -361,5 +413,9 @@ router.post("/pnr/check", adminController.checkPnr);
 
 router.post("/password-resets", adminController.listPasswordResets);
 router.post("/password-resets/resend", adminController.resendPasswordReset);
+
+router.get("/notifications/audience-counts", notificationAdminController.audienceCounts);
+router.get("/notifications/campaigns", notificationAdminController.listCampaigns);
+router.post("/notifications/send", notificationAdminController.sendCampaign);
 
 module.exports = router;

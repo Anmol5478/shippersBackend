@@ -10,7 +10,7 @@ const preferenceByType = {
 exports.registerDevice = async (userId, body) => {
   const token=String(body.expo_push_token || "").trim();
   const type=String(body.device_type || "").toLowerCase();
-  if (!/^(ExponentPushToken|ExpoPushToken)\\[.+\\]$/.test(token))
+  if (!/^(ExponentPushToken|ExpoPushToken)\[.+\]$/.test(token))
     throw new Error("A valid Expo push token is required");
   if (!["android","ios"].includes(type))
     throw new Error("device_type must be android or ios");
