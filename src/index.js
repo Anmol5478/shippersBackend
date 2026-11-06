@@ -21,7 +21,7 @@ const enterpriseRoutes = require("./models/enterprise/enterpriseRoutes");
 const walletRoutes = require("./models/wallet/walletRoutes");
 const adminRoutes = require("./models/admin/adminRoutes");
 const notificationRoutes = require("./models/notifications/notificationRoutes");
-const {processPendingReceipts} = require("./services/notifications/pushReceiptService");
+const processPendingReceipts = require("./models/notifications/pushReceiptService");
 
 app.post("/health/database", async (_req, res) => {
   try {
