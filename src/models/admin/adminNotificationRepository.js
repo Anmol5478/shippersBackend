@@ -110,21 +110,45 @@ const updateCampaignResult = async ({ campaignId, pushAttemptedCount, pushAccept
   `, [pushAttemptedCount, pushAcceptedCount, status, campaignId]);
 };
 
+
 const listCampaigns = async ({ page, limit }) => {
   const offset = (page - 1) * limit;
-  const [countRows] = await db.execute("SELECT COUNT(*) AS total FROM admin_notification_campaigns");
-  const [rows] = await db.execute(`
-    SELECT c.id, c.title, c.message, c.notification_type, c.audience,
-           c.created_by, c.recipient_count, c.push_attempted_count,
-           c.push_accepted_count, c.status, c.created_at, c.completed_at,
-           u.full_name AS created_by_name
-    FROM admin_notification_campaigns c
-    LEFT JOIN users u ON u.user_id = c.created_by
-    ORDER BY c.id DESC
-    LIMIT ? OFFSET ?
-  `, [limit, offset]);
-  return { campaigns: rows, total: Number(countRows[0]?.total || 0), page, limit };
+
+  // Get total campaign count
+  const [countRows] = await db.execute(
+    `SELECT COUNT(*) AS total
+     FROM admin_notification_campaigns`
+  );
+
+  // Get campaign history
+  const [rows] = await db.execute(
+    `SELECT
+        id,
+        title,
+        message,
+        notification_type,
+        audience,
+        created_by,
+        recipient_count,
+        push_attempted_count,
+        push_accepted_count,
+        status,
+        created_at,
+        completed_at
+     FROM admin_notification_campaigns
+     ORDER BY id DESC
+     LIMIT ? OFFSET ?`,
+    [Number(limit), Number(offset)]
+  );
+
+  return {
+    campaigns: rows,
+    total: Number(countRows[0]?.total || 0),
+    page: Number(page),
+    limit: Number(limit)
+  };
 };
+
 
 module.exports = {
   getAudienceUsers, getAudienceCounts, createCampaign,
