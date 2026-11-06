@@ -46,10 +46,40 @@ exports.updatePreferences = async (userId, body) => {
   return exports.preferences(userId);
 };
 exports.list = async (userId, limit, offset) => {
-  const [r] = await db.execute(`SELECT id,title,message,notification_type,reference_type,
-    reference_id,data,is_read,read_at,created_at FROM notifications
-    WHERE user_id=? ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`,[userId,limit,offset]);
-  return r.map(x=>({...x,data:typeof x.data==="string" ? (()=>{try{return JSON.parse(x.data)}catch{return null}})() : x.data}));
+  const safeLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const safeOffset = Math.max(0, parseInt(offset, 10) || 0);
+
+  const [r] = await db.query(
+    `SELECT
+        id,
+        title,
+        message,
+        notification_type,
+        reference_type,
+        reference_id,
+        data,
+        is_read,
+        read_at,
+        created_at
+     FROM notifications
+     WHERE user_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+    [userId]
+  );
+
+  return r.map(x => ({
+    ...x,
+    data: typeof x.data === "string"
+      ? (() => {
+          try {
+            return JSON.parse(x.data);
+          } catch {
+            return null;
+          }
+        })()
+      : x.data
+  }));
 };
 exports.unread = async (userId) => {
   const [r]=await db.execute("SELECT COUNT(*) AS count FROM notifications WHERE user_id=? AND is_read=0",[userId]);
