@@ -520,33 +520,7 @@ const confirmBooking = async ({ bookingId, userId }) => {
       throw new Error("This booking cannot be confirmed in its current state");
     }
 
-    if (String(booking.shipment_type || "PERSONAL").toUpperCase() === "BUSINESS") {
-      if (booking.purchase_bill_status !== "UPLOADED") {
-        throw new Error("A business booking requires an uploaded purchase bill before confirmation");
-      }
-
-      const [billRows] = await connection.execute(
-        `
-          SELECT id, uploaded_by, status
-          FROM enterprise_bills
-          WHERE booking_id = ?
-            AND status IN ('UPLOADED', 'UNDER_REVIEW', 'APPROVED')
-          ORDER BY uploaded_at DESC
-          LIMIT 1
-          FOR UPDATE
-        `,
-        [id]
-      );
-
-      const activeBill = billRows[0];
-      if (!activeBill) {
-        throw new Error("No active purchase bill exists for this business booking");
-      }
-
-      if (String(activeBill.uploaded_by) !== String(booking.sender_id)) {
-        throw new Error("The active purchase bill does not belong to this booking sender");
-      }
-    }
+    await bookingRepository.assertBusinessPurchaseBill(connection, booking);
 
     const [updateResult] = await connection.execute(
       `UPDATE bookings SET booking_status = 'CONFIRMED' WHERE id = ? AND booking_status = 'PENDING'`,

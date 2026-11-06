@@ -4,6 +4,7 @@ const { assertUserNotBlocked } = require("../../utils/userStatus");
 const rideRepository = require("./rideRepository");
 const routingService = require("./routingService");
 const db = require("../../config/db");
+const bookingRepository = require("../bookings/bookingRepository");
 
 const {
   uploadToR2,
@@ -645,40 +646,76 @@ const updateBookingStatus = async ({ bookingId, userId, status }) => {
     );
   }
 
-  const booking = await rideRepository.getBookingForStatusUpdate(id);
+  const connection = await db.getConnection();
 
-  if (!booking) {
-    throw new Error("Booking not found");
-  }
+  try {
+    await connection.beginTransaction();
 
-  // IMPORTANT:
-  // The ride owner/driver is the only person who can approve/reject.
-  if (String(booking.ride_owner_id) !== String(userId)) {
-    throw new Error(
-      "Only the driver who published this ride can approve or reject this booking"
+    const [bookingRows] = await connection.execute(
+      `
+        SELECT
+          b.id,
+          b.ride_id,
+          b.sender_id,
+          b.driver_id,
+          b.booking_status,
+          b.shipment_type,
+          b.purchase_bill_status,
+          r.user_id AS ride_owner_id
+        FROM bookings b
+        INNER JOIN rides r ON b.ride_id = r.id
+        WHERE b.id = ?
+        LIMIT 1
+        FOR UPDATE
+      `,
+      [id]
     );
-  }
 
-  if (booking.booking_status !== "PENDING") {
-    throw new Error(
-      "Only pending bookings can be accepted or rejected"
+    const booking = bookingRows[0];
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (String(booking.ride_owner_id) !== String(userId)) {
+      throw new Error(
+        "Only the driver who published this ride can approve or reject this booking"
+      );
+    }
+
+    if (booking.booking_status !== "PENDING") {
+      throw new Error(
+        "Only pending bookings can be accepted or rejected"
+      );
+    }
+
+    if (normalizedStatus === "CONFIRMED") {
+      await bookingRepository.assertBusinessPurchaseBill(connection, booking);
+    }
+
+    const [updateResult] = await connection.execute(
+      `
+        UPDATE bookings
+        SET booking_status = ?
+        WHERE id = ?
+          AND booking_status = 'PENDING'
+      `,
+      [normalizedStatus, id]
     );
+
+    if (!updateResult.affectedRows) {
+      throw new Error(
+        "Booking status could not be updated. It may no longer be pending"
+      );
+    }
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
 
-  const updated = await rideRepository.updateBookingStatus(
-    id,
-    normalizedStatus
-  );
-
-  if (!updated) {
-    throw new Error(
-      "Booking status could not be updated. It may no longer be pending"
-    );
-  }
-
-  // Return the latest booking details using the existing booking repository.
-  // This avoids duplicating the full booking response query in rides.
-  const bookingRepository = require("../bookings/bookingRepository");
   return bookingRepository.getBookingById(id);
 };
 
