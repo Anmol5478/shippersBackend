@@ -111,16 +111,17 @@ const updateCampaignResult = async ({ campaignId, pushAttemptedCount, pushAccept
 };
 
 
-const listCampaigns = async ({ page, limit }) => {
-  const offset = (page - 1) * limit;
 
-  // Get total campaign count
+const listCampaigns = async ({ page, limit }) => {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
+  const offset = (safePage - 1) * safeLimit;
+
   const [countRows] = await db.execute(
     `SELECT COUNT(*) AS total
      FROM admin_notification_campaigns`
   );
 
-  // Get campaign history
   const [rows] = await db.execute(
     `SELECT
         id,
@@ -138,16 +139,17 @@ const listCampaigns = async ({ page, limit }) => {
      FROM admin_notification_campaigns
      ORDER BY id DESC
      LIMIT ? OFFSET ?`,
-    [Number(limit), Number(offset)]
+    [safeLimit, offset]
   );
 
   return {
     campaigns: rows,
     total: Number(countRows[0]?.total || 0),
-    page: Number(page),
-    limit: Number(limit)
+    page: safePage,
+    limit: safeLimit
   };
 };
+
 
 
 module.exports = {

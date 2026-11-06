@@ -30,9 +30,24 @@ exports.sendCampaign = async (req, res) => {
 exports.listCampaigns = async (req, res) => {
   try {
     const data = await service.listCampaigns(req.query);
-    return res.status(200).json({ success: true, data });
+
+    return res.status(200).json({
+      success: true,
+      data
+    });
+
   } catch (error) {
-    console.error("Admin notification campaigns:", error);
-    return res.status(500).json({ success: false, message: "Unable to load notification campaigns" });
+    console.error(
+      "CAMPAIGN HISTORY DATABASE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to load notification campaigns",
+      error: process.env.NODE_ENV === "development"
+        ? error.message
+        : undefined
+    });
   }
 };
