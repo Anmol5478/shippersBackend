@@ -112,10 +112,12 @@ const updateCampaignResult = async ({ campaignId, pushAttemptedCount, pushAccept
 
 
 
-const listCampaigns = async ({ page, limit }) => {
-  const safePage = Math.max(1, Number(page) || 1);
-  const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
-  const offset = (safePage - 1) * safeLimit;
+const listCampaigns = async ({ page = 1, limit = 10 }) => {
+  // Convert query parameters to valid integers
+  const currentPage = Math.max(1, parseInt(page, 10) || 1);
+  const pageLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+
+  const offset = (currentPage - 1) * pageLimit;
 
   const [countRows] = await db.execute(
     `SELECT COUNT(*) AS total
@@ -139,14 +141,14 @@ const listCampaigns = async ({ page, limit }) => {
      FROM admin_notification_campaigns
      ORDER BY id DESC
      LIMIT ? OFFSET ?`,
-    [safeLimit, offset]
+    [pageLimit, offset]
   );
 
   return {
     campaigns: rows,
     total: Number(countRows[0]?.total || 0),
-    page: safePage,
-    limit: safeLimit
+    page: currentPage,
+    limit: pageLimit,
   };
 };
 
