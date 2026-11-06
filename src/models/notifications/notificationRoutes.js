@@ -1,0 +1,14 @@
+const router=require("express").Router();
+const auth=require("../../middleware/authenticate");
+const c=require("./notificationController");
+router.use(auth);
+router.post("/devices/register",c.register);
+router.delete("/devices/:deviceId",c.unregister);
+router.post("/devices/unregister-token",c.unregister);
+router.get("/",c.list);
+router.get("/unread-count",c.unread);
+router.patch("/read-all",c.readAll);
+router.patch("/:notificationId/read",c.read);
+router.get("/preferences",c.preferences);
+router.put("/preferences",c.updatePreferences);
+module.exports=router;

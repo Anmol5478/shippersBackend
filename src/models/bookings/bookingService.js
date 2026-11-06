@@ -5,6 +5,7 @@ const { uploadToR2, deleteFromR2 } = require("../rides/rideProofStorage");
 const bookingRepository = require("./bookingRepository");
 const enterpriseRepository = require("../enterprise/enterpriseRepository");
 const { assertUserNotBlocked } = require("../../utils/userStatus");
+const notificationService = require("../notifications/notificationService");
 
 const PAYMENT_METHODS = ["CASH", "UPI", "ONLINE"];
 const PAYMENT_POINTS = ["PICKUP", "DROP"];
@@ -369,6 +370,27 @@ const createBooking = async ({ userId, body }) => {
     // ========================================
 
     const booking = await bookingRepository.getBookingById(bookingId);
+
+    // Send a push + in-app notification to the assigned driver only after
+    // the booking transaction has committed. Notification failure must not
+    // undo a successfully created booking.
+    try {
+      await notificationService.createAndSend({
+        userId: String(booking?.driver_id || booking?.driver_id_from_ride || ""),
+        title: "New booking request",
+        message: `${senderName} has requested a parcel booking for ${packageWeight} KG.`,
+        type: "booking",
+        referenceType: "booking",
+        referenceId: bookingId,
+        data: {
+          screen: "BookingDetails",
+          bookingId: String(bookingId),
+          bookingReference
+        }
+      });
+    } catch (notificationError) {
+      console.error("Booking notification failed:", notificationError.message);
+    }
 
     return {
       booking,
