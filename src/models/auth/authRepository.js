@@ -64,52 +64,24 @@ const findKycByUserId = async (userId) => {
    GENERATE USER ID
 ================================ */
 
-const generateCustomUserId = async (role) => {
-  let prefix;
-  let padding;
-
-  switch (Number(role)) {
-    case 1:
-      prefix = "D";
-      padding = 4;
-      break;
-
-    case 2:
-      prefix = "USR";
-      padding = 4;
-      break;
-
-    case 3:
-      prefix = "A";
-      padding = 3;
-      break;
-
-    default:
-      throw new Error("Invalid role");
-  }
-
-  const [rows] = await db.query(
+const generateCustomUserId = async (connection) => {
+  await connection.execute(
     `
-      SELECT fk_user_id
-      FROM users
-      WHERE role = ?
-      ORDER BY fk_user_id DESC
-      LIMIT 1
-    `,
-    [role]
+      INSERT INTO user_id_sequences (id, last_value)
+      VALUES (1, LAST_INSERT_ID(1))
+      ON DUPLICATE KEY UPDATE
+      last_value = LAST_INSERT_ID(last_value + 1)
+    `
   );
 
-  let nextNumber = 1;
+  const [rows] = await connection.execute(
+    "SELECT LAST_INSERT_ID() AS nextNumber"
+  );
 
-  if (rows.length > 0) {
-    nextNumber = Number(rows[0].fk_user_id) + 1;
-  }
-
-  const user_id =
-    `${prefix}${String(nextNumber).padStart(padding, "0")}`;
+  const nextNumber = Number(rows[0].nextNumber);
 
   return {
-    user_id,
+    user_id: `USR${String(nextNumber).padStart(4, "0")}`,
     fk_user_id: nextNumber,
   };
 };
@@ -119,27 +91,38 @@ const generateCustomUserId = async (role) => {
 ================================ */
 
 const createUser = async (user) => {
-  const {
-    full_name,
-    email,
-    phone,
-    password,
-    gender,
-    role,
-  } = user;
+  const connection = await db.getConnection();
 
-  const numericRole = Number(role);
+  try {
+    const {
+      full_name,
+      email,
+      phone,
+      password,
+      gender,
+      role,
+    } = user;
 
-  const generatedId =
-    await generateCustomUserId(numericRole);
+    const generatedId =
+      await generateCustomUserId(connection);
 
-  const user_id = generatedId.user_id;
-  const fk_user_id = generatedId.fk_user_id;
+    const { user_id, fk_user_id } = generatedId;
 
-  const [result] = await db.query(
-    `
-      INSERT INTO users
-      (
+    const [result] = await connection.execute(
+      `
+        INSERT INTO users (
+          fk_user_id,
+          user_id,
+          full_name,
+          email,
+          phone,
+          password,
+          gender,
+          role
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
         fk_user_id,
         user_id,
         full_name,
@@ -147,27 +130,19 @@ const createUser = async (user) => {
         phone,
         password,
         gender,
-        role
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
+        Number(role),
+      ]
+    );
+
+    return {
+      id: result.insertId,
       fk_user_id,
       user_id,
-      full_name,
-      email,
-      phone,
-      password,
-      gender,
-      numericRole,
-    ]
-  );
+    };
 
-  return {
-    id: result.insertId,
-    fk_user_id,
-    user_id,
-  };
+  } finally {
+    connection.release();
+  }
 };
 
 const updatePassword = async (email, password) => {
