@@ -65,18 +65,16 @@ const findKycByUserId = async (userId) => {
 ================================ */
 
 const generateCustomUserId = async (connection) => {
-  await connection.execute(
-    `
-      INSERT INTO user_id_sequences (id, last_value)
-      VALUES (1, LAST_INSERT_ID(1))
-      ON DUPLICATE KEY UPDATE
-      last_value = LAST_INSERT_ID(last_value + 1)
-    `
-  );
+  await connection.execute(`
+    INSERT INTO user_id_sequences (id, current_value)
+    VALUES (1, LAST_INSERT_ID(1))
+    ON DUPLICATE KEY UPDATE
+    current_value = LAST_INSERT_ID(current_value + 1)
+  `);
 
-  const [rows] = await connection.execute(
-    "SELECT LAST_INSERT_ID() AS nextNumber"
-  );
+  const [rows] = await connection.execute(`
+    SELECT LAST_INSERT_ID() AS nextNumber
+  `);
 
   const nextNumber = Number(rows[0].nextNumber);
 
