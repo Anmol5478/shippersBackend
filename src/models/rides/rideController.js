@@ -169,3 +169,15 @@ exports.updateBookingStatus = async (req, res) => {
     });
   }
 };
+
+
+exports.updateRideServices = async (req, res) => {
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) return res.status(401).json({ responseCode: "01", success: false, message: "Authenticated user ID not found" });
+    const data = await rideService.updateRideServices({ rideId: req.params.rideId, userId, body: req.body || {} });
+    return res.status(200).json({ responseCode: "00", success: true, message: "Ride services updated successfully", data });
+  } catch (error) {
+    return res.status(400).json({ responseCode: "01", success: false, message: error.message });
+  }
+};

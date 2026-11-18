@@ -815,7 +815,41 @@ const updateBookingStatus = async ({ bookingId, userId, status }) => {
   return bookingRepository.getBookingById(id);
 };
 
+const updateRideServices = async ({ rideId, userId, body = {} }) => {
+  const parcelEnabled = Boolean(body.parcel_enabled);
+  const passengerEnabled = Boolean(body.passenger_enabled);
+  if (!parcelEnabled && !passengerEnabled) throw new Error("At least one service must remain enabled");
+  const serviceType = parcelEnabled && passengerEnabled ? "BOTH" : parcelEnabled ? "PARCEL" : "PASSENGER";
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rideRows] = await connection.execute("SELECT id, user_id FROM rides WHERE id = ? LIMIT 1 FOR UPDATE", [rideId]);
+    const ride = rideRows[0];
+    if (!ride) throw new Error("Ride not found");
+    if (String(ride.user_id) !== String(userId)) throw new Error("Only the ride owner can update service settings");
+    const [segments] = await connection.execute("SELECT id, reserved_weight_kg, reserved_seats FROM ride_segments WHERE ride_id = ? FOR UPDATE", [rideId]);
+    if (!parcelEnabled && segments.some((s) => Number(s.reserved_weight_kg) > 0)) throw new Error("Cannot disable parcels while parcel bookings are active");
+    if (!passengerEnabled && segments.some((s) => Number(s.reserved_seats) > 0)) throw new Error("Cannot disable passengers while passenger bookings are active");
+    const weight = parcelEnabled ? Number(body.available_weight) : 0;
+    const kgPrice = parcelEnabled ? Number(body.price_per_kg) : null;
+    const seats = passengerEnabled ? Number(body.available_seats) : 0;
+    const seatPrice = passengerEnabled ? Number(body.price_per_seat) : null;
+    if (parcelEnabled && (!Number.isFinite(weight) || weight <= 0 || !Number.isFinite(kgPrice) || kgPrice < 0)) throw new Error("Enter valid parcel weight and price");
+    if (passengerEnabled && (!Number.isInteger(seats) || seats < 1 || seats > 100 || !Number.isFinite(seatPrice) || seatPrice < 0)) throw new Error("Enter valid passenger seats and fare");
+    for (const segment of segments) {
+      if (parcelEnabled && weight < Number(segment.reserved_weight_kg)) throw new Error("Parcel capacity cannot be lower than already reserved weight");
+      if (passengerEnabled && seats < Number(segment.reserved_seats)) throw new Error("Seat capacity cannot be lower than already reserved seats");
+    }
+    await connection.execute(`UPDATE rides SET service_type = ?, available_weight = ?, price_per_kg = ?, available_seats = ?, price_per_seat = ? WHERE id = ?`, [serviceType, parcelEnabled ? weight : null, kgPrice, seats, seatPrice, rideId]);
+    await connection.execute(`UPDATE ride_segments SET capacity_weight_kg = ?, capacity_seats = ? WHERE ride_id = ?`, [parcelEnabled ? weight : 0, passengerEnabled ? seats : 0, rideId]);
+    await connection.commit();
+    return { ride_id: Number(rideId), service_type: serviceType, parcel_enabled: parcelEnabled, passenger_enabled: passengerEnabled, available_weight: parcelEnabled ? weight : null, price_per_kg: kgPrice, available_seats: seats, price_per_seat: seatPrice };
+  } catch (error) { await connection.rollback(); throw error; }
+  finally { connection.release(); }
+};
+
 module.exports = {
+  updateRideServices,
   searchRides,
   searchPassengerRides,
   getUserRides,

@@ -306,6 +306,8 @@ router.post(
  *       409:
  *         description: Business purchase bill is missing or invalid
  */
+router.patch("/:rideId/service-settings", authenticate, rideController.updateRideServices);
+
 router.patch(
   "/bookings/:bookingId/status",
   authenticate,
