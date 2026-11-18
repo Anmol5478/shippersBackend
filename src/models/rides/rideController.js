@@ -3,6 +3,19 @@ const rideService = require("./rideService");
 /**
  * Search available rides.
  */
+exports.searchPassengerRides = async (req, res) => {
+  try {
+    const rides = await rideService.searchPassengerRides(req.body || {});
+    return res.status(200).json({
+      responseCode: "00", success: true,
+      message: rides.length ? "Passenger rides found successfully" : "No passenger rides found",
+      data: rides,
+    });
+  } catch (error) {
+    return res.status(400).json({ responseCode: "01", success: false, message: error.message });
+  }
+};
+
 exports.searchRides = async (req, res) => {
   try {
     const rides = await rideService.searchRides(req.body || {});

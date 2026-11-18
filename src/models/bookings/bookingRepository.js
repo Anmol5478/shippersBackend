@@ -11,6 +11,9 @@ const getRideForBooking = async (connection, rideId) => {
         user_id,
         transport_type,
         transport_mode,
+        service_type,
+        available_seats,
+        price_per_seat,
         pickup_city,
         pickup_state,
         drop_city,
@@ -64,6 +67,8 @@ const createBooking = async (connection, booking) => {
       INSERT INTO bookings (
         booking_reference,
         ride_id,
+        pickup_stop_id,
+        drop_stop_id,
         sender_id,
         driver_id,
         package_weight_kg,
@@ -89,7 +94,7 @@ const createBooking = async (connection, booking) => {
         delivery_otp
       )
       VALUES (
-        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
@@ -101,6 +106,8 @@ const createBooking = async (connection, booking) => {
     [
       booking.booking_reference,
       booking.ride_id,
+      booking.pickup_stop_id,
+      booking.drop_stop_id,
       booking.sender_id,
       booking.driver_id,
       booking.package_weight_kg,
@@ -149,9 +156,15 @@ const getBookingById = async (bookingId) => {
         r.price_per_kg AS ride_price_per_kg,
         r.route_distance_km,
         r.route_duration_minutes,
-        r.route_polyline
+        r.route_polyline,
+        ps.city AS selected_pickup_city,
+        ps.state AS selected_pickup_state,
+        ds.city AS selected_drop_city,
+        ds.state AS selected_drop_state
       FROM bookings b
       INNER JOIN rides r ON b.ride_id = r.id
+      LEFT JOIN ride_stops ps ON ps.id = b.pickup_stop_id
+      LEFT JOIN ride_stops ds ON ds.id = b.drop_stop_id
       WHERE b.id = ?
       LIMIT 1
     `,
@@ -180,9 +193,15 @@ const getSenderBookings = async (senderId) => {
         r.available_weight,
         r.route_distance_km,
         r.route_duration_minutes,
-        r.route_polyline
+        r.route_polyline,
+        ps.city AS selected_pickup_city,
+        ps.state AS selected_pickup_state,
+        ds.city AS selected_drop_city,
+        ds.state AS selected_drop_state
       FROM bookings b
       INNER JOIN rides r ON b.ride_id = r.id
+      LEFT JOIN ride_stops ps ON ps.id = b.pickup_stop_id
+      LEFT JOIN ride_stops ds ON ds.id = b.drop_stop_id
       WHERE b.sender_id = ?
       ORDER BY b.created_at DESC
     `,
@@ -211,9 +230,15 @@ const getDriverBookings = async (driverId) => {
         r.available_weight,
         r.route_distance_km,
         r.route_duration_minutes,
-        r.route_polyline
+        r.route_polyline,
+        ps.city AS selected_pickup_city,
+        ps.state AS selected_pickup_state,
+        ds.city AS selected_drop_city,
+        ds.state AS selected_drop_state
       FROM bookings b
       INNER JOIN rides r ON b.ride_id = r.id
+      LEFT JOIN ride_stops ps ON ps.id = b.pickup_stop_id
+      LEFT JOIN ride_stops ds ON ds.id = b.drop_stop_id
       WHERE b.driver_id = ?
       ORDER BY b.created_at DESC
     `,
@@ -237,6 +262,81 @@ const updateBookingStatus = async (bookingId, status) => {
   );
 
   return result.affectedRows > 0;
+};
+
+
+const getRideStops = async (connection, rideId) => {
+  const [rows] = await connection.execute(
+    `SELECT id, ride_id, stop_order, stop_type, city, state
+     FROM ride_stops WHERE ride_id = ? ORDER BY stop_order ASC`,
+    [rideId]
+  );
+  return rows;
+};
+
+const getSegmentsForStopRange = async (connection, rideId, pickupStopId, dropStopId) => {
+  const [rows] = await connection.execute(
+    `SELECT
+       seg.id, seg.segment_order, seg.capacity_weight_kg, seg.reserved_weight_kg,
+       seg.capacity_seats, seg.reserved_seats,
+       fs.id AS from_stop_id, fs.stop_order AS from_order,
+       ts.id AS to_stop_id, ts.stop_order AS to_order
+     FROM ride_segments seg
+     INNER JOIN ride_stops fs ON fs.id = seg.from_stop_id
+     INNER JOIN ride_stops ts ON ts.id = seg.to_stop_id
+     WHERE seg.ride_id = ?
+       AND fs.stop_order >= (
+         SELECT stop_order FROM ride_stops WHERE id = ? AND ride_id = ?
+       )
+       AND ts.stop_order <= (
+         SELECT stop_order FROM ride_stops WHERE id = ? AND ride_id = ?
+       )
+     ORDER BY seg.segment_order
+     FOR UPDATE`,
+    [rideId, pickupStopId, rideId, dropStopId, rideId]
+  );
+  return rows;
+};
+
+const reserveParcelSegments = async (connection, segments, weight) => {
+  for (const segment of segments) {
+    const [result] = await connection.execute(
+      `UPDATE ride_segments
+       SET reserved_weight_kg = reserved_weight_kg + ?
+       WHERE id = ? AND reserved_weight_kg + ? <= capacity_weight_kg`,
+      [weight, segment.id, weight]
+    );
+    if (!result.affectedRows) {
+      throw new Error("Parcel capacity is no longer available on one or more selected route segments");
+    }
+  }
+};
+
+const releaseParcelAllocation = async (connection, bookingId) => {
+  const [allocations] = await connection.execute(
+    `SELECT segment_id, reserved_weight_kg
+     FROM parcel_booking_segments WHERE booking_id = ? FOR UPDATE`,
+    [bookingId]
+  );
+  for (const allocation of allocations) {
+    await connection.execute(
+      `UPDATE ride_segments
+       SET reserved_weight_kg = GREATEST(0, reserved_weight_kg - ?)
+       WHERE id = ?`,
+      [allocation.reserved_weight_kg, allocation.segment_id]
+    );
+  }
+  await connection.execute(`DELETE FROM parcel_booking_segments WHERE booking_id = ?`, [bookingId]);
+};
+
+const insertParcelAllocations = async (connection, bookingId, segments, weight) => {
+  for (const segment of segments) {
+    await connection.execute(
+      `INSERT INTO parcel_booking_segments (booking_id, segment_id, reserved_weight_kg)
+       VALUES (?, ?, ?)`,
+      [bookingId, segment.id, weight]
+    );
+  }
 };
 
 const assertBusinessPurchaseBill = async (connection, booking) => {
@@ -290,6 +390,11 @@ const updatePaymentStatus = async (bookingId, paymentStatus) => {
 module.exports = {
   getRideForBooking,
   getReservedWeight,
+  getRideStops,
+  getSegmentsForStopRange,
+  reserveParcelSegments,
+  releaseParcelAllocation,
+  insertParcelAllocations,
   createBooking,
   getBookingById,
   getSenderBookings,

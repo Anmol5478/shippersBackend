@@ -16,3 +16,8 @@ CREATE TABLE IF NOT EXISTS admin_notification_campaigns (
     KEY idx_admin_campaign_audience (audience),
     KEY idx_admin_campaign_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+SELECT COUNT(*) AS total
+FROM admin_notification_campaigns;
+
+LEFT JOIN users u ON u.user_id = c.created_by u.full_name AS created_by_name

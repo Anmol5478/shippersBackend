@@ -34,6 +34,28 @@ const upload = multer({
  *       200: { description: Available rides fetched }
  */
 router.post("/search-available", rideController.searchRides);
+/**
+ * @swagger
+ * /api/rides/search-passenger-available:
+ *   post:
+ *     summary: Search passenger-capable rides between any two ordered stops
+ *     tags: [Rides]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [from, to]
+ *             properties:
+ *               from: { type: string, example: Noida }
+ *               to: { type: string, example: Delhi }
+ *               seats: { type: integer, default: 1 }
+ *               date: { type: string, format: date }
+ *     responses:
+ *       200: { description: Passenger rides with available seats }
+ */
+router.post("/search-passenger-available", rideController.searchPassengerRides);
 
 /**
  * @swagger
@@ -146,6 +168,19 @@ router.post(
  *                 enum: [PUBLIC_TRANSPORT, PRIVATE_VEHICLE]
  *               transport_mode:
  *                 type: string
+ *               service_type:
+ *                 type: string
+ *                 enum: [PARCEL, PASSENGER, BOTH]
+ *                 default: PARCEL
+ *               available_seats:
+ *                 type: integer
+ *                 description: Required for PASSENGER or BOTH
+ *               price_per_seat:
+ *                 type: number
+ *                 description: Required for PASSENGER or BOTH
+ *               intermediate_stops:
+ *                 type: string
+ *                 description: Optional JSON array of intermediate stop objects
  *               pickup_city:
  *                 type: string
  *               pickup_state:

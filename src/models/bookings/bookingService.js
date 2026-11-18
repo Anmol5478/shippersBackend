@@ -76,6 +76,8 @@ const createBooking = async ({ userId, body }) => {
     shipment_type,
     enterprise_profile_id,
     business_details_snapshot,
+    pickup_stop_id,
+    drop_stop_id,
   } = body;
 
   const normalizedShipmentType = String(shipment_type || "PERSONAL")
@@ -294,31 +296,46 @@ const createBooking = async ({ userId, body }) => {
       throw new Error("This ride is no longer available");
     }
 
-    // ========================================
-    // RESERVED WEIGHT
-    // ========================================
-
-    const reservedWeight = await bookingRepository.getReservedWeight(
-      connection,
-      rideId
-    );
-
-    const rideCapacity = Number(ride.available_weight);
-    const remainingWeight = Math.max(0, rideCapacity - reservedWeight);
-
-    // ========================================
-    // WEIGHT CHECK
-    // ========================================
-
-    if (packageWeight > remainingWeight) {
-      throw new Error(
-        `Only ${remainingWeight.toFixed(2)} KG is available on this ride`
-      );
+    if (!["PARCEL", "BOTH"].includes(String(ride.service_type || "PARCEL"))) {
+      throw new Error("This ride does not accept parcel bookings");
     }
 
-    // ========================================
-    // PRICE FROM DATABASE
-    // ========================================
+    const stops = await bookingRepository.getRideStops(connection, rideId);
+    const startStop = stops.find((stop) => stop.stop_type === "START");
+    const endStop = stops.find((stop) => stop.stop_type === "END");
+    const pickupStopId = Number(pickup_stop_id || startStop?.id);
+    const dropStopId = Number(drop_stop_id || endStop?.id);
+    const pickupStop = stops.find((stop) => Number(stop.id) === pickupStopId);
+    const dropStop = stops.find((stop) => Number(stop.id) === dropStopId);
+
+    if (!pickupStop || !dropStop) {
+      throw new Error("Selected pickup or drop stop does not belong to this ride");
+    }
+    if (pickupStop.stop_order >= dropStop.stop_order) {
+      throw new Error("Pickup stop must come before drop stop");
+    }
+
+    const segments = await bookingRepository.getSegmentsForStopRange(
+      connection, rideId, pickupStopId, dropStopId
+    );
+    const expectedSegmentCount = dropStop.stop_order - pickupStop.stop_order;
+    if (!segments.length || segments.length !== expectedSegmentCount) {
+      throw new Error("The selected route segment is not available");
+    }
+
+    const insufficientSegment = segments.find(
+      (segment) => Number(segment.capacity_weight_kg) - Number(segment.reserved_weight_kg) < packageWeight
+    );
+    if (insufficientSegment) {
+      const remaining = Math.max(0, Number(insufficientSegment.capacity_weight_kg) - Number(insufficientSegment.reserved_weight_kg));
+      throw new Error(`Only ${remaining.toFixed(2)} KG is available on part of this route`);
+    }
+
+    const rideCapacity = Math.min(...segments.map((segment) => Number(segment.capacity_weight_kg)));
+    const remainingWeight = Math.min(...segments.map(
+      (segment) => Number(segment.capacity_weight_kg) - Number(segment.reserved_weight_kg)
+    ));
+    const reservedWeight = Math.max(0, rideCapacity - remainingWeight);
 
     const pricePerKg = Number(ride.price_per_kg);
 
@@ -336,6 +353,8 @@ const createBooking = async ({ userId, body }) => {
     const bookingId = await bookingRepository.createBooking(connection, {
       booking_reference: bookingReference,
       ride_id: rideId,
+      pickup_stop_id: pickupStopId,
+      drop_stop_id: dropStopId,
       sender_id: String(userId),
       driver_id: String(ride.user_id),
       package_weight_kg: packageWeight,
@@ -362,6 +381,9 @@ const createBooking = async ({ userId, body }) => {
       pickup_otp: null,
       delivery_otp: null,
     });
+
+    await bookingRepository.reserveParcelSegments(connection, segments, packageWeight);
+    await bookingRepository.insertParcelAllocations(connection, bookingId, segments, packageWeight);
 
     await connection.commit();
 
@@ -471,25 +493,39 @@ const getTravellerBookings = async (userId) => {
  * Cancel booking (only by sender).
  */
 const cancelBooking = async ({ bookingId, userId }) => {
-  const booking = await bookingRepository.getBookingById(bookingId);
+  const id = Number(bookingId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid booking ID");
+  if (!userId) throw new Error("Authenticated user is required");
 
-  if (!booking) {
-    throw new Error("Booking not found");
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT id, sender_id, booking_status FROM bookings WHERE id = ? FOR UPDATE`,
+      [id]
+    );
+    const booking = rows[0];
+    if (!booking) throw new Error("Booking not found");
+    if (String(booking.sender_id) !== String(userId)) {
+      throw new Error("You are not allowed to cancel this booking");
+    }
+    if (!["PENDING", "CONFIRMED"].includes(booking.booking_status)) {
+      throw new Error("This booking cannot be cancelled now");
+    }
+    await bookingRepository.releaseParcelAllocation(connection, id);
+    const [result] = await connection.execute(
+      `UPDATE bookings SET booking_status = 'CANCELLED' WHERE id = ? AND booking_status IN ('PENDING','CONFIRMED')`,
+      [id]
+    );
+    if (!result.affectedRows) throw new Error("Booking status changed; cancellation failed");
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
-
-  if (String(booking.sender_id) !== String(userId)) {
-    throw new Error("You are not allowed to cancel this booking");
-  }
-
-  if (
-    ["DELIVERED", "PICKED_UP", "IN_TRANSIT"].includes(booking.booking_status)
-  ) {
-    throw new Error("This booking cannot be cancelled now");
-  }
-
-  await bookingRepository.updateBookingStatus(bookingId, "CANCELLED");
-
-  return bookingRepository.getBookingById(bookingId);
+  return bookingRepository.getBookingById(id);
 };
 
 const confirmBooking = async ({ bookingId, userId }) => {

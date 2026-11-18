@@ -72,6 +72,19 @@ const searchRides = async (query) => {
   });
 };
 
+
+const searchPassengerRides = async (query) => {
+  const from = String(query.from || "").trim();
+  const to = String(query.to || "").trim();
+  const date = query.date || null;
+  const seats = Number(query.seats || 1);
+  if (!from || !to) throw new Error("From and To locations are required");
+  if (from.toLowerCase() === to.toLowerCase()) throw new Error("From and To locations must be different");
+  if (!Number.isInteger(seats) || seats < 1 || seats > 8) throw new Error("Seats must be between 1 and 8");
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error("Date must be YYYY-MM-DD");
+  return rideRepository.searchPassengerRides({ from, to, date, seats });
+};
+
 /**
  * Get rides published by user.
  */
@@ -174,9 +187,14 @@ const shapeRideResponse = (ride) => {
   return {
     ride: {
       id: ride.id,
+      stops: ride.stops || [],
+      segment_count: ride.segment_count || 1,
       user_id: ride.user_id,
       transport_type: ride.transport_type,
       transport_mode: ride.transport_mode,
+      service_type: ride.service_type || "PARCEL",
+      available_seats: Number(ride.available_seats || 0),
+      price_per_seat: ride.price_per_seat ?? null,
       pickup_city: ride.pickup_city,
       pickup_state: ride.pickup_state,
       pickup_latitude: ride.pickup_latitude,
@@ -227,6 +245,10 @@ const createRide = async ({ userId, body, files }) => {
   const {
     transport_type,
     transport_mode,
+    service_type = "PARCEL",
+    available_seats,
+    price_per_seat,
+    intermediate_stops,
     pickup_city,
     pickup_state,
     pickup_latitude,
@@ -254,6 +276,11 @@ const createRide = async ({ userId, body, files }) => {
 
   if (!ALLOWED_TRANSPORT_TYPES.includes(transport_type)) {
     throw new Error("Invalid transport type");
+  }
+
+  const normalizedServiceType = String(service_type || "PARCEL").trim().toUpperCase();
+  if (!["PARCEL", "PASSENGER", "BOTH"].includes(normalizedServiceType)) {
+    throw new Error("Invalid service_type. Allowed: PARCEL, PASSENGER, BOTH");
   }
 
   if (!transport_mode) {
@@ -370,14 +397,67 @@ const createRide = async ({ userId, body, files }) => {
     );
   }
 
-  const weight = Number(available_weight);
-  if (!Number.isFinite(weight) || weight <= 0) {
-    throw new Error("Available weight must be greater than 0");
+  const includesParcel = ["PARCEL", "BOTH"].includes(normalizedServiceType);
+  const includesPassenger = ["PASSENGER", "BOTH"].includes(normalizedServiceType);
+
+  const weight = includesParcel ? Number(available_weight) : null;
+  if (includesParcel && (!Number.isFinite(weight) || weight <= 0)) {
+    throw new Error("Available weight must be greater than 0 for parcel services");
   }
 
-  const price = Number(price_per_kg);
-  if (!Number.isFinite(price) || price < 0) {
-    throw new Error("Price per kg must be 0 or greater");
+  const price = includesParcel ? Number(price_per_kg) : null;
+  if (includesParcel && (!Number.isFinite(price) || price < 0)) {
+    throw new Error("Price per kg must be 0 or greater for parcel services");
+  }
+
+  const seats = includesPassenger ? Number(available_seats) : 0;
+  if (includesPassenger && (!Number.isInteger(seats) || seats <= 0 || seats > 100)) {
+    throw new Error("Available seats must be an integer between 1 and 100");
+  }
+
+  const seatPrice = includesPassenger ? Number(price_per_seat) : null;
+  if (includesPassenger && (!Number.isFinite(seatPrice) || seatPrice < 0)) {
+    throw new Error("Price per seat must be 0 or greater for passenger services");
+  }
+
+  let normalizedIntermediateStops = [];
+  if (intermediate_stops !== undefined && intermediate_stops !== null && intermediate_stops !== "") {
+    try {
+      normalizedIntermediateStops = typeof intermediate_stops === "string"
+        ? JSON.parse(intermediate_stops)
+        : intermediate_stops;
+    } catch {
+      throw new Error("intermediate_stops must be a valid JSON array");
+    }
+    if (!Array.isArray(normalizedIntermediateStops) || normalizedIntermediateStops.length > 20) {
+      throw new Error("intermediate_stops must be an array with at most 20 stops");
+    }
+    normalizedIntermediateStops = normalizedIntermediateStops.map((stop, index) => {
+      const city = String(stop?.city || "").trim();
+      if (!city || city.length > 150) {
+        throw new Error(`Intermediate stop ${index + 1} requires a city (max 150 characters)`);
+      }
+      const latitude = stop.latitude === null || stop.latitude === undefined || stop.latitude === "" ? null : Number(stop.latitude);
+      const longitude = stop.longitude === null || stop.longitude === undefined || stop.longitude === "" ? null : Number(stop.longitude);
+      if ((latitude === null) !== (longitude === null)) {
+        throw new Error(`Intermediate stop ${index + 1} must provide both latitude and longitude`);
+      }
+      if (latitude !== null && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) {
+        throw new Error(`Intermediate stop ${index + 1} has invalid latitude`);
+      }
+      if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
+        throw new Error(`Intermediate stop ${index + 1} has invalid longitude`);
+      }
+      return {
+        city,
+        state: stop.state ? String(stop.state).trim() : null,
+        address: stop.address ? String(stop.address).trim() : null,
+        latitude,
+        longitude,
+        planned_arrival_at: stop.planned_arrival_at || null,
+        planned_departure_at: stop.planned_departure_at || null,
+      };
+    });
   }
 
   const routeIndex = Number(route_index);
@@ -427,6 +507,9 @@ const createRide = async ({ userId, body, files }) => {
       user_id: String(userId).trim(),
       transport_type,
       transport_mode,
+      service_type: normalizedServiceType,
+      available_seats: seats,
+      price_per_seat: seatPrice,
       pickup_city: String(pickup_city).trim(),
       pickup_state: pickup_state
         ? String(pickup_state).trim()
@@ -451,6 +534,13 @@ const createRide = async ({ userId, body, files }) => {
     const rideId = await rideRepository.insertRideOnly(
       connection,
       ridePayload
+    );
+
+    const routeStops = await rideRepository.insertRideStopsAndSegments(
+      connection,
+      rideId,
+      ridePayload,
+      normalizedIntermediateStops
     );
 
     let ticketKey = null;
@@ -519,6 +609,8 @@ const createRide = async ({ userId, body, files }) => {
       id: rideId,
       ...ridePayload,
       status: "active",
+      stops: routeStops.stops,
+      segment_count: routeStops.segment_count,
       proof: {
         pnr_number: proofPayload.pnr_number,
         vehicle_number: proofPayload.vehicle_number,
@@ -692,6 +784,10 @@ const updateBookingStatus = async ({ bookingId, userId, status }) => {
       await bookingRepository.assertBusinessPurchaseBill(connection, booking);
     }
 
+    if (normalizedStatus === "REJECTED") {
+      await bookingRepository.releaseParcelAllocation(connection, id);
+    }
+
     const [updateResult] = await connection.execute(
       `
         UPDATE bookings
@@ -721,6 +817,7 @@ const updateBookingStatus = async ({ bookingId, userId, status }) => {
 
 module.exports = {
   searchRides,
+  searchPassengerRides,
   getUserRides,
   createRide,
   calculateRoutes,
