@@ -86,6 +86,23 @@ const searchPassengerRides = async (query) => {
 };
 
 /**
+ * Homepage discovery: cheapest upcoming rides across all routes.
+ */
+const getCheapestRides = async (query = {}) => {
+  const serviceType = String(query.serviceType || "PARCEL").trim().toUpperCase();
+  if (!["PARCEL", "PASSENGER"].includes(serviceType)) {
+    throw new Error("serviceType must be PARCEL or PASSENGER");
+  }
+
+  const limit = Number(query.limit ?? 6);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 12) {
+    throw new Error("limit must be an integer between 1 and 12");
+  }
+
+  return rideRepository.getCheapestRides({ serviceType, limit });
+};
+
+/**
  * Get rides published by user.
  */
 const getUserRides = async (userId) => {
@@ -852,6 +869,7 @@ module.exports = {
   updateRideServices,
   searchRides,
   searchPassengerRides,
+  getCheapestRides,
   getUserRides,
   createRide,
   calculateRoutes,

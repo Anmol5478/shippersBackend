@@ -89,6 +89,70 @@ const searchRides = async ({ from, to, minWeight, maxWeight, date }) => {
   return rows;
 };
 
+
+/**
+ * Fetch the cheapest upcoming rides across all routes for the homepage.
+ * Capacity is calculated from the minimum remaining capacity across every
+ * segment, so a ride is shown only when its full published route still has room.
+ */
+const getCheapestRides = async ({ serviceType = "PARCEL", limit = 6 }) => {
+  const service = String(serviceType).toUpperCase();
+  const safeLimit = Math.min(12, Math.max(1, Number.parseInt(limit, 10) || 6));
+
+  const isParcel = service === "PARCEL";
+  const priceColumn = isParcel ? "r.price_per_kg" : "r.price_per_seat";
+  const remainingColumn = isParcel ? "capacity.remaining_weight" : "capacity.remaining_seats";
+  const allowedServices = isParcel ? "('PARCEL', 'BOTH')" : "('PASSENGER', 'BOTH')";
+
+  const query = `
+    SELECT
+      r.id,
+      r.user_id,
+      u.full_name AS traveller_name,
+      r.transport_type,
+      r.transport_mode,
+      r.service_type,
+      r.pickup_city,
+      r.pickup_state,
+      r.drop_city,
+      r.drop_state,
+      r.travel_date,
+      r.departure_time,
+      r.available_weight,
+      r.price_per_kg,
+      r.available_seats,
+      r.price_per_seat,
+      COALESCE(capacity.remaining_weight, 0) AS remaining_weight,
+      COALESCE(capacity.remaining_seats, 0) AS remaining_seats,
+      r.route_distance_km,
+      r.route_duration_minutes,
+      r.route_polyline,
+      r.status,
+      r.notes
+    FROM rides r
+    INNER JOIN users u ON u.user_id = r.user_id
+    INNER JOIN (
+      SELECT
+        ride_id,
+        MIN(capacity_weight_kg - reserved_weight_kg) AS remaining_weight,
+        MIN(capacity_seats - reserved_seats) AS remaining_seats
+      FROM ride_segments
+      GROUP BY ride_id
+    ) capacity ON capacity.ride_id = r.id
+    WHERE r.status = 'active'
+      AND r.service_type IN ${allowedServices}
+      AND ${priceColumn} IS NOT NULL
+      AND ${remainingColumn} > 0
+      AND TIMESTAMP(r.travel_date, r.departure_time) >=
+          DATE_ADD(UTC_TIMESTAMP(), INTERVAL 330 MINUTE)
+    ORDER BY ${priceColumn} ASC, r.travel_date ASC, r.departure_time ASC, r.id DESC
+    LIMIT ${safeLimit}
+  `;
+
+  const [rows] = await db.query(query);
+  return rows;
+};
+
 /**
  * Get rides published by a user
  */
@@ -491,6 +555,7 @@ const searchPassengerRides = async ({ from, to, date, seats = 1 }) => {
 module.exports = {
   searchRides,
   searchPassengerRides,
+  getCheapestRides,
   getUserRides,
   createRideWithProof,
   insertRideOnly,

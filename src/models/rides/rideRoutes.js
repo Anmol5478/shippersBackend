@@ -33,6 +33,8 @@ const upload = multer({
  *     responses:
  *       200: { description: Available rides fetched }
  */
+router.post("/cheapest", rideController.getCheapestRides);
+
 router.post("/search-available", rideController.searchRides);
 /**
  * @swagger

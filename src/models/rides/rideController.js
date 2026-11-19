@@ -16,6 +16,25 @@ exports.searchPassengerRides = async (req, res) => {
   }
 };
 
+exports.getCheapestRides = async (req, res) => {
+  try {
+    const rides = await rideService.getCheapestRides(req.body || {});
+    return res.status(200).json({
+      responseCode: "00",
+      success: true,
+      message: rides.length ? "Cheapest rides fetched successfully" : "No upcoming rides found",
+      data: rides,
+    });
+  } catch (error) {
+    console.error("getCheapestRides controller error:", error);
+    return res.status(400).json({
+      responseCode: "01",
+      success: false,
+      message: error.message || "Unable to fetch cheapest rides",
+    });
+  }
+};
+
 exports.searchRides = async (req, res) => {
   try {
     const rides = await rideService.searchRides(req.body || {});
