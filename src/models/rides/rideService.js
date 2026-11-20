@@ -477,17 +477,27 @@ const createRide = async ({ userId, body, files }) => {
     });
   }
 
-  const routeIndex = Number(route_index);
+let routeIndex = null;
+let routeDistance = null;
+let routeDuration = null;
+let routePolyline = null;
+
+// Route calculation is required only for private vehicles
+if (transport_type === "PRIVATE_VEHICLE") {
+  routeIndex = Number(route_index);
+
   if (!Number.isInteger(routeIndex) || routeIndex < 0) {
     throw new Error("Valid route index is required");
   }
 
-  const routeDistance = Number(route_distance_km);
+  routeDistance = Number(route_distance_km);
+
   if (!Number.isFinite(routeDistance) || routeDistance <= 0) {
     throw new Error("Valid route distance is required");
   }
 
-  const routeDuration = Number(route_duration_minutes);
+  routeDuration = Number(route_duration_minutes);
+
   if (!Number.isFinite(routeDuration) || routeDuration <= 0) {
     throw new Error("Valid route duration is required");
   }
@@ -495,6 +505,9 @@ const createRide = async ({ userId, body, files }) => {
   if (!route_polyline || typeof route_polyline !== "string") {
     throw new Error("Selected route geometry is required");
   }
+
+  routePolyline = route_polyline;
+}
 
   if (notes && String(notes).length > 500) {
     throw new Error("Notes cannot exceed 500 characters");
