@@ -554,10 +554,10 @@ if (transport_type === "PRIVATE_VEHICLE") {
       departure_time,
       available_weight: weight,
       price_per_kg: price,
-      route_index: routeIndex,
-      route_distance_km: routeDistance,
-      route_duration_minutes: routeDuration,
-      route_polyline,
+      route_index: routeIndex ?? null,
+route_distance_km: routeDistance ?? null,
+route_duration_minutes: routeDuration ?? null,
+route_polyline: routePolyline ?? null,
       notes: notes ? String(notes).trim() : null,
     };
 
