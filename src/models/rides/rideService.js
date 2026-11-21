@@ -10,6 +10,7 @@ const {
   uploadToR2,
   deleteFromR2,
 } = require("./rideProofStorage");
+const pricingService = require("../pricing/pricingService");
 
 const ALLOWED_TRANSPORT_TYPES = [
   "PUBLIC_TRANSPORT",
@@ -437,6 +438,36 @@ const createRide = async ({ userId, body, files }) => {
     throw new Error("Price per seat must be 0 or greater for passenger services");
   }
 
+  // Server-side price-range validation (never trust client).
+  // Uses the same pricing engine as /api/pricing/estimate so published
+  // unit prices stay inside the permitted band for this distance/mode.
+  {
+    const routeDistanceForPricing = Number(route_distance_km);
+    if (!Number.isFinite(routeDistanceForPricing) || routeDistanceForPricing <= 0) {
+      throw new Error("Valid route distance is required for price validation");
+    }
+
+    if (includesParcel) {
+      pricingService.validateSelectedPrice({
+        selected_price: price,
+        service_type: "PARCEL",
+        distance_km: routeDistanceForPricing,
+        transport_mode,
+        weight_kg: weight,
+      });
+    }
+
+    if (includesPassenger) {
+      pricingService.validateSelectedPrice({
+        selected_price: seatPrice,
+        service_type: "PASSENGER",
+        distance_km: routeDistanceForPricing,
+        transport_mode,
+        seats: seats,
+      });
+    }
+  }
+
   let normalizedIntermediateStops = [];
   if (intermediate_stops !== undefined && intermediate_stops !== null && intermediate_stops !== "") {
     try {
@@ -477,27 +508,17 @@ const createRide = async ({ userId, body, files }) => {
     });
   }
 
-let routeIndex = null;
-let routeDistance = null;
-let routeDuration = null;
-let routePolyline = null;
-
-// Route calculation is required only for private vehicles
-if (transport_type === "PRIVATE_VEHICLE") {
-  routeIndex = Number(route_index);
-
+  const routeIndex = Number(route_index);
   if (!Number.isInteger(routeIndex) || routeIndex < 0) {
     throw new Error("Valid route index is required");
   }
 
-  routeDistance = Number(route_distance_km);
-
+  const routeDistance = Number(route_distance_km);
   if (!Number.isFinite(routeDistance) || routeDistance <= 0) {
     throw new Error("Valid route distance is required");
   }
 
-  routeDuration = Number(route_duration_minutes);
-
+  const routeDuration = Number(route_duration_minutes);
   if (!Number.isFinite(routeDuration) || routeDuration <= 0) {
     throw new Error("Valid route duration is required");
   }
@@ -505,9 +526,6 @@ if (transport_type === "PRIVATE_VEHICLE") {
   if (!route_polyline || typeof route_polyline !== "string") {
     throw new Error("Selected route geometry is required");
   }
-
-  routePolyline = route_polyline;
-}
 
   if (notes && String(notes).length > 500) {
     throw new Error("Notes cannot exceed 500 characters");
@@ -554,10 +572,10 @@ if (transport_type === "PRIVATE_VEHICLE") {
       departure_time,
       available_weight: weight,
       price_per_kg: price,
-      route_index: routeIndex ?? null,
-route_distance_km: routeDistance ?? null,
-route_duration_minutes: routeDuration ?? null,
-route_polyline: routePolyline ?? null,
+      route_index: routeIndex,
+      route_distance_km: routeDistance,
+      route_duration_minutes: routeDuration,
+      route_polyline,
       notes: notes ? String(notes).trim() : null,
     };
 
@@ -866,6 +884,38 @@ const updateRideServices = async ({ rideId, userId, body = {} }) => {
     const seatPrice = passengerEnabled ? Number(body.price_per_seat) : null;
     if (parcelEnabled && (!Number.isFinite(weight) || weight <= 0 || !Number.isFinite(kgPrice) || kgPrice < 0)) throw new Error("Enter valid parcel weight and price");
     if (passengerEnabled && (!Number.isInteger(seats) || seats < 1 || seats > 100 || !Number.isFinite(seatPrice) || seatPrice < 0)) throw new Error("Enter valid passenger seats and fare");
+
+    // Re-validate unit prices against the pricing engine using the ride's
+    // stored distance and transport mode.
+    {
+      const [metaRows] = await connection.execute(
+        "SELECT transport_mode, route_distance_km FROM rides WHERE id = ? LIMIT 1",
+        [rideId]
+      );
+      const meta = metaRows[0];
+      if (!meta) throw new Error("Ride not found");
+      const distanceKm = Number(meta.route_distance_km);
+      const mode = meta.transport_mode;
+      if (parcelEnabled) {
+        pricingService.validateSelectedPrice({
+          selected_price: kgPrice,
+          service_type: "PARCEL",
+          distance_km: distanceKm,
+          transport_mode: mode,
+          weight_kg: weight,
+        });
+      }
+      if (passengerEnabled) {
+        pricingService.validateSelectedPrice({
+          selected_price: seatPrice,
+          service_type: "PASSENGER",
+          distance_km: distanceKm,
+          transport_mode: mode,
+          seats,
+        });
+      }
+    }
+
     for (const segment of segments) {
       if (parcelEnabled && weight < Number(segment.reserved_weight_kg)) throw new Error("Parcel capacity cannot be lower than already reserved weight");
       if (passengerEnabled && seats < Number(segment.reserved_seats)) throw new Error("Seat capacity cannot be lower than already reserved seats");

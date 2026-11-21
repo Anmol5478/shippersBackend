@@ -22,6 +22,7 @@ const enterpriseRoutes = require("./models/enterprise/enterpriseRoutes");
 const walletRoutes = require("./models/wallet/walletRoutes");
 const adminRoutes = require("./models/admin/adminRoutes");
 const notificationRoutes = require("./models/notifications/notificationRoutes");
+const pricingRoutes = require("./models/pricing/pricingRoutes");
 const processPendingReceipts = require("./models/notifications/pushReceiptService");
 
 app.post("/health/database", async (_req, res) => {
@@ -45,6 +46,7 @@ app.use("/api/enterprise", enterpriseRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/pricing", pricingRoutes);
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get("/health/ping-server-9x7k", (_req, res) =>
   res.status(200).json({ success: true })

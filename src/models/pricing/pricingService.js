@@ -1,0 +1,404 @@
+/**
+ * Ridezey Pricing Engine
+ * ---------------------
+ * Calculates recommended, minimum and maximum fares for parcel and passenger
+ * services. Pure functions — no DB access. Configuration is centralized in
+ * src/config/pricingConfig.js (PROVISIONAL rates).
+ */
+
+const pricingConfig = require("../../config/pricingConfig");
+
+const ALL_TRANSPORT_MODES = [
+  "TRAIN",
+  "BUS",
+  "FLIGHT",
+  "CAR",
+  "BIKE",
+  "OTHER",
+];
+
+/**
+ * Round a monetary value consistently.
+ * @param {number} value
+ * @param {number} [decimals]
+ * @returns {number}
+ */
+function roundMoney(value, decimals = pricingConfig.rounding_decimals) {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+/**
+ * Resolve mode multiplier for a service config.
+ * @param {object} serviceConfig
+ * @param {string} transportMode
+ * @returns {number}
+ */
+function getModeMultiplier(serviceConfig, transportMode) {
+  const mode = String(transportMode || "").toUpperCase();
+  const mult = serviceConfig.mode_multipliers[mode];
+  if (mult === undefined) {
+    throw new Error(
+      `Unsupported transport_mode "${transportMode}". Allowed: ${ALL_TRANSPORT_MODES.join(", ")}`
+    );
+  }
+  return mult;
+}
+
+/**
+ * Apply percentage adjustment and absolute floor, then enforce
+ * minimum <= recommended <= maximum and non-negative values.
+ *
+ * @param {number} recommended
+ * @param {{ min_percent: number, max_percent: number }} adjustment
+ * @returns {{ minimum_fare: number, recommended_fare: number, maximum_fare: number }}
+ */
+function applyAdjustmentRange(recommended, adjustment) {
+  const rec = roundMoney(Math.max(recommended, 0));
+
+  let minRaw = rec * (1 + Number(adjustment.min_percent) / 100);
+  let maxRaw = rec * (1 + Number(adjustment.max_percent) / 100);
+
+  // Absolute marketplace floor
+  const floor = Number(pricingConfig.absolute_minimum_fare) || 0;
+  minRaw = Math.max(minRaw, floor);
+  maxRaw = Math.max(maxRaw, minRaw);
+
+  let minimum_fare = roundMoney(minRaw);
+  let maximum_fare = roundMoney(maxRaw);
+  let recommended_fare = roundMoney(rec);
+
+  // Guarantee invariant after rounding
+  if (minimum_fare > recommended_fare) {
+    minimum_fare = recommended_fare;
+  }
+  if (maximum_fare < recommended_fare) {
+    maximum_fare = recommended_fare;
+  }
+  if (minimum_fare < 0) minimum_fare = 0;
+  if (recommended_fare < 0) recommended_fare = 0;
+  if (maximum_fare < 0) maximum_fare = 0;
+
+  return { minimum_fare, recommended_fare, maximum_fare };
+}
+
+/**
+ * Core parcel total-fare calculation (continuous, no slabs).
+ * @param {object} params
+ * @param {number} params.distance_km
+ * @param {string} params.transport_mode
+ * @param {number} params.weight_kg
+ * @returns {{ minimum_fare: number, recommended_fare: number, maximum_fare: number, adjustment_limits: object, formula_inputs: object }}
+ */
+function calculateParcelFare({ distance_km, transport_mode, weight_kg }) {
+  const cfg = pricingConfig.parcel;
+
+  const distance = Number(distance_km);
+  const weight = Number(weight_kg);
+
+  if (!Number.isFinite(distance) || distance < cfg.min_distance_km) {
+    throw new Error(`distance_km must be a number >= ${cfg.min_distance_km}`);
+  }
+  if (distance > cfg.max_distance_km) {
+    throw new Error(`distance_km cannot exceed ${cfg.max_distance_km}`);
+  }
+  if (!Number.isFinite(weight) || weight < cfg.min_weight_kg) {
+    throw new Error(`weight_kg must be a number >= ${cfg.min_weight_kg}`);
+  }
+  if (weight > cfg.max_weight_kg) {
+    throw new Error(`weight_kg cannot exceed ${cfg.max_weight_kg}`);
+  }
+
+  const modeMult = getModeMultiplier(cfg, transport_mode);
+
+  const distanceComponent = distance * cfg.rate_per_km * modeMult;
+  const weightComponent = weight * cfg.rate_per_kg * modeMult;
+  let recommended = cfg.base_fare + distanceComponent + weightComponent;
+
+  // Enforce service-level minimum recommended
+  recommended = Math.max(recommended, cfg.minimum_recommended_fare);
+
+  const range = applyAdjustmentRange(recommended, cfg.adjustment);
+
+  return {
+    ...range,
+    adjustment_limits: {
+      minimum_percent: cfg.adjustment.min_percent,
+      maximum_percent: cfg.adjustment.max_percent,
+    },
+    formula_inputs: {
+      base_fare: cfg.base_fare,
+      rate_per_km: cfg.rate_per_km,
+      rate_per_kg: cfg.rate_per_kg,
+      mode_multiplier: modeMult,
+      distance_component: roundMoney(distanceComponent, 2),
+      weight_component: roundMoney(weightComponent, 2),
+    },
+  };
+}
+
+/**
+ * Core passenger total-fare calculation.
+ * @param {object} params
+ * @param {number} params.distance_km
+ * @param {string} params.transport_mode
+ * @param {number} params.seats
+ * @returns {{ minimum_fare: number, recommended_fare: number, maximum_fare: number, adjustment_limits: object, formula_inputs: object }}
+ */
+function calculatePassengerFare({ distance_km, transport_mode, seats }) {
+  const cfg = pricingConfig.passenger;
+
+  const distance = Number(distance_km);
+  const seatCount = Number(seats);
+
+  if (!Number.isFinite(distance) || distance < cfg.min_distance_km) {
+    throw new Error(`distance_km must be a number >= ${cfg.min_distance_km}`);
+  }
+  if (distance > cfg.max_distance_km) {
+    throw new Error(`distance_km cannot exceed ${cfg.max_distance_km}`);
+  }
+  if (!Number.isInteger(seatCount) || seatCount < cfg.min_seats) {
+    throw new Error(`seats must be an integer >= ${cfg.min_seats}`);
+  }
+  if (seatCount > cfg.max_seats) {
+    throw new Error(`seats cannot exceed ${cfg.max_seats}`);
+  }
+
+  const modeMult = getModeMultiplier(cfg, transport_mode);
+
+  const distanceComponent = distance * cfg.rate_per_km * modeMult;
+  const seatComponent = seatCount * cfg.rate_per_seat * modeMult;
+  let recommended = cfg.base_fare + distanceComponent + seatComponent;
+
+  recommended = Math.max(recommended, cfg.minimum_recommended_fare);
+
+  const range = applyAdjustmentRange(recommended, cfg.adjustment);
+
+  return {
+    ...range,
+    adjustment_limits: {
+      minimum_percent: cfg.adjustment.min_percent,
+      maximum_percent: cfg.adjustment.max_percent,
+    },
+    formula_inputs: {
+      base_fare: cfg.base_fare,
+      rate_per_km: cfg.rate_per_km,
+      rate_per_seat: cfg.rate_per_seat,
+      mode_multiplier: modeMult,
+      distance_component: roundMoney(distanceComponent, 2),
+      seat_component: roundMoney(seatComponent, 2),
+    },
+  };
+}
+
+/**
+ * Public entry: estimate fare range for a service.
+ *
+ * @param {object} input
+ * @param {string} input.service_type - PARCEL | PASSENGER
+ * @param {number} input.distance_km
+ * @param {string} input.transport_mode
+ * @param {number} [input.weight_kg] - required for PARCEL
+ * @param {number} [input.seats] - required for PASSENGER (default 1)
+ * @returns {object} Full estimation payload matching API contract
+ */
+function estimateFare(input = {}) {
+  const serviceType = String(input.service_type || "")
+    .trim()
+    .toUpperCase();
+
+  if (!["PARCEL", "PASSENGER"].includes(serviceType)) {
+    throw new Error("service_type must be PARCEL or PASSENGER");
+  }
+
+  const distance_km = Number(input.distance_km);
+  const transport_mode = String(input.transport_mode || "")
+    .trim()
+    .toUpperCase();
+
+  if (!transport_mode) {
+    throw new Error("transport_mode is required");
+  }
+  if (!ALL_TRANSPORT_MODES.includes(transport_mode)) {
+    throw new Error(
+      `Unsupported transport_mode. Allowed: ${ALL_TRANSPORT_MODES.join(", ")}`
+    );
+  }
+
+  let result;
+  let weight_kg = null;
+  let seats = null;
+
+  if (serviceType === "PARCEL") {
+    weight_kg = Number(input.weight_kg);
+    result = calculateParcelFare({
+      distance_km,
+      transport_mode,
+      weight_kg,
+    });
+  } else {
+    seats =
+      input.seats === undefined || input.seats === null || input.seats === ""
+        ? 1
+        : Number(input.seats);
+    result = calculatePassengerFare({
+      distance_km,
+      transport_mode,
+      seats,
+    });
+  }
+
+  return {
+    service_type: serviceType,
+    distance_km: Number(distance_km),
+    transport_mode,
+    weight_kg: serviceType === "PARCEL" ? weight_kg : undefined,
+    seats: serviceType === "PASSENGER" ? seats : undefined,
+    currency: pricingConfig.currency,
+    pricing: {
+      minimum_fare: result.minimum_fare,
+      recommended_fare: result.recommended_fare,
+      maximum_fare: result.maximum_fare,
+    },
+    adjustment_limits: result.adjustment_limits,
+    pricing_version: pricingConfig.pricing_version,
+    // Internal diagnostic — not required by frontend, safe to omit later
+    _formula: result.formula_inputs,
+  };
+}
+
+/**
+ * Derive the allowed unit-price range for ride publishing.
+ *
+ * Parcel: returns min/max for price_per_kg such that
+ *   (price_per_kg * available_weight) falls inside the total-fare range
+ *   calculated for that weight & distance.
+ *
+ * Passenger: returns min/max for price_per_seat such that
+ *   (price_per_seat * available_seats) falls inside the total-fare range
+ *   for that seat count & distance. For a single seat the numbers are
+ *   identical to the total range.
+ *
+ * @param {object} params
+ * @param {"PARCEL"|"PASSENGER"} params.service_type
+ * @param {number} params.distance_km
+ * @param {string} params.transport_mode
+ * @param {number} [params.weight_kg] - available_weight for parcel
+ * @param {number} [params.seats] - available_seats for passenger
+ * @returns {{ minimum: number, recommended: number, maximum: number, total_range: object }}
+ */
+function getUnitPriceRange(params) {
+  const serviceType = String(params.service_type || "")
+    .trim()
+    .toUpperCase();
+
+  if (serviceType === "PARCEL") {
+    const weight = Number(params.weight_kg);
+    if (!Number.isFinite(weight) || weight <= 0) {
+      throw new Error("weight_kg must be > 0 to derive unit price range");
+    }
+    const total = calculateParcelFare({
+      distance_km: params.distance_km,
+      transport_mode: params.transport_mode,
+      weight_kg: weight,
+    });
+    return {
+      minimum: roundMoney(total.minimum_fare / weight),
+      recommended: roundMoney(total.recommended_fare / weight),
+      maximum: roundMoney(total.maximum_fare / weight),
+      total_range: {
+        minimum_fare: total.minimum_fare,
+        recommended_fare: total.recommended_fare,
+        maximum_fare: total.maximum_fare,
+      },
+    };
+  }
+
+  if (serviceType === "PASSENGER") {
+    const seats = Number(params.seats) || 1;
+    if (!Number.isInteger(seats) || seats < 1) {
+      throw new Error("seats must be an integer >= 1 to derive unit price range");
+    }
+    const total = calculatePassengerFare({
+      distance_km: params.distance_km,
+      transport_mode: params.transport_mode,
+      seats,
+    });
+    return {
+      minimum: roundMoney(total.minimum_fare / seats),
+      recommended: roundMoney(total.recommended_fare / seats),
+      maximum: roundMoney(total.maximum_fare / seats),
+      total_range: {
+        minimum_fare: total.minimum_fare,
+        recommended_fare: total.recommended_fare,
+        maximum_fare: total.maximum_fare,
+      },
+    };
+  }
+
+  throw new Error("service_type must be PARCEL or PASSENGER");
+}
+
+/**
+ * Validate a traveler-selected unit price against the calculated range.
+ * Does NOT clamp — throws a clear error on any violation.
+ *
+ * @param {object} params
+ * @param {number} params.selected_price - price_per_kg or price_per_seat
+ * @param {"PARCEL"|"PASSENGER"} params.service_type
+ * @param {number} params.distance_km
+ * @param {string} params.transport_mode
+ * @param {number} [params.weight_kg]
+ * @param {number} [params.seats]
+ * @returns {{ valid: true, range: object, selected_price: number }}
+ */
+function validateSelectedPrice(params) {
+  const selected = Number(params.selected_price);
+
+  if (!Number.isFinite(selected) || selected < 0) {
+    throw new Error(
+      "Selected price must be a non-negative finite number"
+    );
+  }
+
+  // Reject NaN / Infinity explicitly (Number.isFinite already covers)
+  if (Object.is(selected, NaN)) {
+    throw new Error("Selected price is not a valid number");
+  }
+
+  const range = getUnitPriceRange(params);
+
+  if (selected < range.minimum) {
+    throw new Error(
+      `Selected price ${selected} is below the allowed minimum of ${range.minimum} ${pricingConfig.currency}`
+    );
+  }
+  if (selected > range.maximum) {
+    throw new Error(
+      `Selected price ${selected} is above the allowed maximum of ${range.maximum} ${pricingConfig.currency}`
+    );
+  }
+
+  return {
+    valid: true,
+    selected_price: selected,
+    range: {
+      minimum: range.minimum,
+      recommended: range.recommended,
+      maximum: range.maximum,
+    },
+    total_range: range.total_range,
+  };
+}
+
+module.exports = {
+  estimateFare,
+  calculateParcelFare,
+  calculatePassengerFare,
+  getUnitPriceRange,
+  validateSelectedPrice,
+  roundMoney,
+  ALL_TRANSPORT_MODES,
+  pricingConfig, // read-only exposure for tests / diagnostics
+};
