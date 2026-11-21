@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const db = require("../../config/db");
 const repository = require("./passengerBookingRepository");
+const { computePassengerBookingBreakdown } = require("../pricing/pricingService");
 const { assertUserNotBlocked } = require("../../utils/userStatus");
 
 const reference = () => `RZPS-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
@@ -62,12 +63,24 @@ const createPassengerBooking = async ({ userId, body }) => {
 
     const farePerSeat = Number(ride.price_per_seat);
     if (!Number.isFinite(farePerSeat) || farePerSeat < 0) throw new Error("Invalid ride seat price");
-    const totalFare = Number((farePerSeat * seatCount).toFixed(2));
+    const breakdown = computePassengerBookingBreakdown({
+      price_per_seat: farePerSeat,
+      seats: seatCount,
+    });
+    // total_fare kept as total_payable so existing UIs stay consistent
+    const totalFare = breakdown.total_payable;
     bookingId = await repository.create(connection, {
       booking_reference: reference(), ride_id: rideId, passenger_id: String(userId),
       driver_id: String(ride.user_id), pickup_stop_id: pickupStopId, drop_stop_id: dropStopId,
       seat_count: seatCount, passenger_name: passengerName, passenger_phone: passengerPhone,
-      fare_per_seat: farePerSeat, total_fare: totalFare, payment_method: paymentMethod, notes,
+      fare_per_seat: farePerSeat, total_fare: totalFare,
+      customer_pay: breakdown.customer_pay,
+      commission_percentage: breakdown.commission_percentage,
+      commission_amount: breakdown.commission_amount,
+      platform_fee: breakdown.platform_fee,
+      taxes: breakdown.taxes,
+      total_payable: breakdown.total_payable,
+      payment_method: paymentMethod, notes,
     });
     await repository.reserve(connection, bookingId, segments, seatCount);
     await connection.commit();

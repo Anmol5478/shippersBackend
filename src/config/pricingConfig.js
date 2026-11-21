@@ -79,6 +79,18 @@ module.exports = {
 
     minimum_recommended_fare: 120,
 
+    /**
+     * Marketplace fees applied when a passenger books seats.
+     * customer_pay  = price_per_seat * seats   (driver-listed seat total)
+     * platform_fee  = fixed INR per booking
+     * commission    = customer_pay * commission_percent / 100  (platform cut)
+     * taxes         = (commission + platform_fee) * tax_percent / 100
+     * total_payable = customer_pay + platform_fee + taxes
+     */
+    commission_percent: 10,
+    platform_fee: 15,
+    tax_percent: 18,
+
     mode_multipliers: {
       CAR: 1.0,
       BIKE: 0.9,

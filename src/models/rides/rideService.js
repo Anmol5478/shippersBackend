@@ -83,7 +83,33 @@ const searchPassengerRides = async (query) => {
   if (from.toLowerCase() === to.toLowerCase()) throw new Error("From and To locations must be different");
   if (!Number.isInteger(seats) || seats < 1 || seats > 8) throw new Error("Seats must be between 1 and 8");
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) throw new Error("Date must be YYYY-MM-DD");
-  return rideRepository.searchPassengerRides({ from, to, date, seats });
+  const rows = await rideRepository.searchPassengerRides({ from, to, date, seats });
+  return (rows || []).map((ride) => {
+    let pricing = null;
+    try {
+      pricing = computePassengerBookingBreakdown({
+        price_per_seat: Number(ride.price_per_seat),
+        seats,
+      });
+    } catch (_) {
+      pricing = null;
+    }
+    return {
+      ...ride,
+      // Explicit city fields for list UI (never use street-level address here)
+      pickup_city: ride.pickup_city,
+      drop_city: ride.drop_city,
+      requested_seats: seats,
+      // Payable breakdown for the requested seat count
+      customer_pay: pricing?.customer_pay ?? null,
+      commission_percentage: pricing?.commission_percentage ?? null,
+      commission_amount: pricing?.commission_amount ?? null,
+      platform_fee: pricing?.platform_fee ?? null,
+      taxes: pricing?.taxes ?? null,
+      total_payable: pricing?.total_payable ?? null,
+      pricing,
+    };
+  });
 };
 
 /**

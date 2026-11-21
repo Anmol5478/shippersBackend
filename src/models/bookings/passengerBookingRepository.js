@@ -36,20 +36,47 @@ const getSegments = async (connection, rideId, pickupStopId, dropStopId) => {
 };
 
 const create = async (connection, data) => {
-  const [result] = await connection.execute(
-    `INSERT INTO passenger_bookings
-      (booking_reference, ride_id, passenger_id, driver_id, pickup_stop_id, drop_stop_id,
-       seat_count, passenger_name, passenger_phone, fare_per_seat, total_fare,
-       payment_method, payment_status, booking_status, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?)`,
-    [
-      data.booking_reference, data.ride_id, data.passenger_id, data.driver_id,
-      data.pickup_stop_id, data.drop_stop_id, data.seat_count, data.passenger_name,
-      data.passenger_phone, data.fare_per_seat, data.total_fare,
-      data.payment_method, data.notes,
-    ]
-  );
-  return result.insertId;
+  // Prefer extended columns when present (customer_pay, platform_fee, taxes, total_payable).
+  // Falls back to classic fare_per_seat / total_fare only schema.
+  try {
+    const [result] = await connection.execute(
+      `INSERT INTO passenger_bookings
+        (booking_reference, ride_id, passenger_id, driver_id, pickup_stop_id, drop_stop_id,
+         seat_count, passenger_name, passenger_phone, fare_per_seat, total_fare,
+         customer_pay, commission_percentage, commission_amount, platform_fee, taxes, total_payable,
+         payment_method, payment_status, booking_status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?)`,
+      [
+        data.booking_reference, data.ride_id, data.passenger_id, data.driver_id,
+        data.pickup_stop_id, data.drop_stop_id, data.seat_count, data.passenger_name,
+        data.passenger_phone, data.fare_per_seat, data.total_fare,
+        data.customer_pay ?? data.total_fare, data.commission_percentage ?? null,
+        data.commission_amount ?? null, data.platform_fee ?? null,
+        data.taxes ?? null, data.total_payable ?? data.total_fare,
+        data.payment_method, data.notes,
+      ]
+    );
+    return result.insertId;
+  } catch (err) {
+    // Schema without fee columns — store classic totals only
+    if (err && (err.code === "ER_BAD_FIELD_ERROR" || /Unknown column/i.test(String(err.message)))) {
+      const [result] = await connection.execute(
+        `INSERT INTO passenger_bookings
+          (booking_reference, ride_id, passenger_id, driver_id, pickup_stop_id, drop_stop_id,
+           seat_count, passenger_name, passenger_phone, fare_per_seat, total_fare,
+           payment_method, payment_status, booking_status, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?)`,
+        [
+          data.booking_reference, data.ride_id, data.passenger_id, data.driver_id,
+          data.pickup_stop_id, data.drop_stop_id, data.seat_count, data.passenger_name,
+          data.passenger_phone, data.fare_per_seat, data.total_payable ?? data.total_fare,
+          data.payment_method, data.notes,
+        ]
+      );
+      return result.insertId;
+    }
+    throw err;
+  }
 };
 
 const reserve = async (connection, bookingId, segments, seats) => {

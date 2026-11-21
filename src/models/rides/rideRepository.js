@@ -34,8 +34,16 @@ const searchRides = async ({ from, to, minWeight, maxWeight, date }) => {
     WHERE r.status = 'active'
       AND r.service_type IN ('PARCEL','BOTH')
       AND ps.stop_order < ds.stop_order
-      AND LOWER(ps.city) = LOWER(?)
-      AND LOWER(ds.city) = LOWER(?)
+      AND (
+        LOWER(ps.city) = LOWER(?)
+        OR LOWER(ps.city) LIKE LOWER(?)
+        OR LOWER(CONCAT(COALESCE(ps.city,''), ', ', COALESCE(ps.state,''))) LIKE LOWER(?)
+      )
+      AND (
+        LOWER(ds.city) = LOWER(?)
+        OR LOWER(ds.city) LIKE LOWER(?)
+        OR LOWER(CONCAT(COALESCE(ds.city,''), ', ', COALESCE(ds.state,''))) LIKE LOWER(?)
+      )
       AND (
         SELECT MIN(seg.capacity_weight_kg - seg.reserved_weight_kg)
         FROM ride_segments seg
@@ -55,7 +63,7 @@ const searchRides = async ({ from, to, minWeight, maxWeight, date }) => {
           AND ts.stop_order <= ds.stop_order
       )
   `;
-  const params = [from, to];
+  const params = [from, `%${from}%`, `%${from}%`, to, `%${to}%`, `%${to}%`];
   if (date) {
     query += " AND r.travel_date = ?";
     params.push(date);
@@ -534,8 +542,16 @@ const searchPassengerRides = async ({ from, to, date, seats = 1 }) => {
      WHERE r.status = 'active'
        AND r.service_type IN ('PASSENGER','BOTH')
        AND ps.stop_order < ds.stop_order
-       AND LOWER(ps.city) = LOWER(?)
-       AND LOWER(ds.city) = LOWER(?)
+       AND (
+         LOWER(ps.city) = LOWER(?)
+         OR LOWER(ps.city) LIKE LOWER(?)
+         OR LOWER(CONCAT(COALESCE(ps.city,''), ', ', COALESCE(ps.state,''))) LIKE LOWER(?)
+       )
+       AND (
+         LOWER(ds.city) = LOWER(?)
+         OR LOWER(ds.city) LIKE LOWER(?)
+         OR LOWER(CONCAT(COALESCE(ds.city,''), ', ', COALESCE(ds.state,''))) LIKE LOWER(?)
+       )
        AND (? IS NULL OR r.travel_date = ?)
        AND (
          SELECT MIN(seg.capacity_seats - seg.reserved_seats)
@@ -547,7 +563,11 @@ const searchPassengerRides = async ({ from, to, date, seats = 1 }) => {
            AND ts.stop_order <= ds.stop_order
        ) >= ?
      ORDER BY r.travel_date, r.departure_time, ps.stop_order`,
-    [from, to, date || null, date || null, seats]
+    [
+      from, `%${from}%`, `%${from}%`,
+      to, `%${to}%`, `%${to}%`,
+      date || null, date || null, seats,
+    ]
   );
   return rows;
 };

@@ -392,12 +392,55 @@ function validateSelectedPrice(params) {
   };
 }
 
+
+/**
+ * Passenger booking payable breakdown for search results and bookings.
+ *
+ * customer_pay      = price_per_seat * seats  (amount attributable to seats)
+ * commission_amount = customer_pay * commission_percent / 100
+ * platform_fee      = fixed fee from config
+ * taxes             = (commission_amount + platform_fee) * tax_percent / 100
+ * total_payable     = customer_pay + platform_fee + taxes
+ *
+ * @param {{ price_per_seat: number, seats?: number }} params
+ */
+function computePassengerBookingBreakdown(params = {}) {
+  const seats = Math.max(1, Math.floor(Number(params.seats) || 1));
+  const pricePerSeat = Number(params.price_per_seat);
+  if (!Number.isFinite(pricePerSeat) || pricePerSeat < 0) {
+    throw new Error("price_per_seat must be a non-negative number");
+  }
+
+  const cfg = pricingConfig.passenger;
+  const commissionPercent = Number(cfg.commission_percent ?? 10);
+  const platformFee = Number(cfg.platform_fee ?? 0);
+  const taxPercent = Number(cfg.tax_percent ?? 0);
+
+  const customerPay = roundMoney(pricePerSeat * seats);
+  const commissionAmount = roundMoney((customerPay * commissionPercent) / 100);
+  const taxes = roundMoney(((commissionAmount + platformFee) * taxPercent) / 100);
+  const totalPayable = roundMoney(customerPay + platformFee + taxes);
+
+  return {
+    seats,
+    price_per_seat: roundMoney(pricePerSeat),
+    customer_pay: customerPay,
+    commission_percentage: commissionPercent,
+    commission_amount: commissionAmount,
+    platform_fee: roundMoney(platformFee),
+    taxes,
+    total_payable: totalPayable,
+    currency: pricingConfig.currency,
+  };
+}
+
 module.exports = {
   estimateFare,
   calculateParcelFare,
   calculatePassengerFare,
   getUnitPriceRange,
   validateSelectedPrice,
+  computePassengerBookingBreakdown,
   roundMoney,
   ALL_TRANSPORT_MODES,
   pricingConfig, // read-only exposure for tests / diagnostics
