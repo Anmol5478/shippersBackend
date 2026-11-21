@@ -217,10 +217,12 @@ const shapeRideResponse = (ride) => {
       pickup_state: ride.pickup_state,
       pickup_latitude: ride.pickup_latitude,
       pickup_longitude: ride.pickup_longitude,
+      pickup_address: ride.pickup_address || null,
       drop_city: ride.drop_city,
       drop_state: ride.drop_state,
       drop_latitude: ride.drop_latitude,
       drop_longitude: ride.drop_longitude,
+      drop_address: ride.drop_address || null,
       travel_date: ride.travel_date,
       departure_time: ride.departure_time,
       available_weight: ride.available_weight,
@@ -271,10 +273,12 @@ const createRide = async ({ userId, body, files }) => {
     pickup_state,
     pickup_latitude,
     pickup_longitude,
+    pickup_address,
     drop_city,
     drop_state,
     drop_latitude,
     drop_longitude,
+    drop_address,
     travel_date,
     departure_time,
     available_weight,
@@ -551,6 +555,13 @@ const createRide = async ({ userId, body, files }) => {
   try {
     await connection.beginTransaction();
 
+    const normalizeAddress = (value, fallbackCity) => {
+      const trimmed = value != null ? String(value).trim() : "";
+      if (trimmed) return trimmed.slice(0, 500);
+      // Always persist a usable address on stops (city is the minimum)
+      return fallbackCity ? String(fallbackCity).trim().slice(0, 500) : null;
+    };
+
     const ridePayload = {
       user_id: String(userId).trim(),
       transport_type,
@@ -564,10 +575,12 @@ const createRide = async ({ userId, body, files }) => {
         : null,
       pickup_latitude: pickupLat,
       pickup_longitude: pickupLng,
+      pickup_address: normalizeAddress(pickup_address, pickup_city),
       drop_city: String(drop_city).trim(),
       drop_state: drop_state ? String(drop_state).trim() : null,
       drop_latitude: dropLat,
       drop_longitude: dropLng,
+      drop_address: normalizeAddress(drop_address, drop_city),
       travel_date,
       departure_time,
       available_weight: weight,

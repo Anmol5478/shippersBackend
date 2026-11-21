@@ -18,13 +18,28 @@ exports.searchCities = async (req, res) => {
     const params = [];
 
     if (search) {
-      query += ` AND LOWER(city_name) LIKE LOWER(?)`;
-      params.push(`${search}%`);
-    }
+      // Match anywhere so compound / locality-style names work when present in DB
+      // e.g. "Delhi" matches "New Delhi", "South Delhi", etc.
+      query += ` AND (
+        LOWER(city_name) LIKE LOWER(?)
+        OR LOWER(CONCAT(COALESCE(city_name, ''), ', ', COALESCE(state, ''))) LIKE LOWER(?)
+      )`;
+      const like = `%${search}%`;
+      params.push(like, like);
 
-    query += `
-      ORDER BY city_name;
-    `;
+      query += `
+        ORDER BY
+          CASE WHEN LOWER(city_name) LIKE LOWER(?) THEN 0 ELSE 1 END,
+          city_name
+        LIMIT 40
+      `;
+      params.push(`${search}%`);
+    } else {
+      query += `
+        ORDER BY city_name
+        LIMIT 40
+      `;
+    }
 
     const [cities] = await db.query(query, params);
 
