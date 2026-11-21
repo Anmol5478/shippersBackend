@@ -73,7 +73,7 @@ module.exports = {
      *       + (distance_km * rate_per_km * mode_multiplier)
      *       + (seats * rate_per_seat * mode_multiplier)
      */
-    base_fare: 60,
+    base_fare: 100,
     rate_per_km: 6,
     rate_per_seat: 100,
 
