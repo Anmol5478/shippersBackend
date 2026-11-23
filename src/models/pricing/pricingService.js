@@ -4,6 +4,9 @@
  * Calculates recommended, minimum and maximum fares for parcel and passenger
  * services. Pure functions — no DB access. Configuration is centralized in
  * src/config/pricingConfig.js (PROVISIONAL rates).
+ *
+ * Passenger estimates are distance-based only (not seat-count dependent).
+ * Parcel bookings use the same payable / commission model as passengers.
  */
 
 const pricingConfig = require("../../config/pricingConfig");
@@ -139,18 +142,19 @@ function calculateParcelFare({ distance_km, transport_mode, weight_kg }) {
 }
 
 /**
- * Core passenger total-fare calculation.
+ * Core passenger fare calculation (distance-based only — independent of seats).
+ * The returned range is the guide for price_per_seat the driver should set.
+ *
  * @param {object} params
  * @param {number} params.distance_km
  * @param {string} params.transport_mode
- * @param {number} params.seats
+ * @param {number} [params.seats] - accepted for API compatibility; ignored in formula
  * @returns {{ minimum_fare: number, recommended_fare: number, maximum_fare: number, adjustment_limits: object, formula_inputs: object }}
  */
 function calculatePassengerFare({ distance_km, transport_mode, seats }) {
   const cfg = pricingConfig.passenger;
 
   const distance = Number(distance_km);
-  const seatCount = Number(seats);
 
   if (!Number.isFinite(distance) || distance < cfg.min_distance_km) {
     throw new Error(`distance_km must be a number >= ${cfg.min_distance_km}`);
@@ -158,18 +162,23 @@ function calculatePassengerFare({ distance_km, transport_mode, seats }) {
   if (distance > cfg.max_distance_km) {
     throw new Error(`distance_km cannot exceed ${cfg.max_distance_km}`);
   }
-  if (!Number.isInteger(seatCount) || seatCount < cfg.min_seats) {
-    throw new Error(`seats must be an integer >= ${cfg.min_seats}`);
-  }
-  if (seatCount > cfg.max_seats) {
-    throw new Error(`seats cannot exceed ${cfg.max_seats}`);
+
+  // Seats are optional for estimation and do NOT affect the recommended range.
+  if (seats !== undefined && seats !== null && seats !== "") {
+    const seatCount = Number(seats);
+    if (!Number.isInteger(seatCount) || seatCount < cfg.min_seats) {
+      throw new Error(`seats must be an integer >= ${cfg.min_seats}`);
+    }
+    if (seatCount > cfg.max_seats) {
+      throw new Error(`seats cannot exceed ${cfg.max_seats}`);
+    }
   }
 
   const modeMult = getModeMultiplier(cfg, transport_mode);
 
   const distanceComponent = distance * cfg.rate_per_km * modeMult;
-  const seatComponent = seatCount * cfg.rate_per_seat * modeMult;
-  let recommended = cfg.base_fare + distanceComponent + seatComponent;
+  // No seat component — estimate independent of seat count
+  let recommended = cfg.base_fare + distanceComponent;
 
   recommended = Math.max(recommended, cfg.minimum_recommended_fare);
 
@@ -184,10 +193,10 @@ function calculatePassengerFare({ distance_km, transport_mode, seats }) {
     formula_inputs: {
       base_fare: cfg.base_fare,
       rate_per_km: cfg.rate_per_km,
-      rate_per_seat: cfg.rate_per_seat,
+      rate_per_seat: 0,
       mode_multiplier: modeMult,
       distance_component: roundMoney(distanceComponent, 2),
-      seat_component: roundMoney(seatComponent, 2),
+      seat_component: 0,
     },
   };
 }
@@ -200,7 +209,7 @@ function calculatePassengerFare({ distance_km, transport_mode, seats }) {
  * @param {number} input.distance_km
  * @param {string} input.transport_mode
  * @param {number} [input.weight_kg] - required for PARCEL
- * @param {number} [input.seats] - required for PASSENGER (default 1)
+ * @param {number} [input.seats] - optional for PASSENGER (does not affect estimate)
  * @returns {object} Full estimation payload matching API contract
  */
 function estimateFare(input = {}) {
@@ -275,17 +284,17 @@ function estimateFare(input = {}) {
  *   (price_per_kg * available_weight) falls inside the total-fare range
  *   calculated for that weight & distance.
  *
- * Passenger: returns min/max for price_per_seat such that
- *   (price_per_seat * available_seats) falls inside the total-fare range
- *   for that seat count & distance. For a single seat the numbers are
- *   identical to the total range.
+ * Passenger: returns min/max for price_per_seat. The estimate is independent
+ *   of seat count, so the unit range equals the total recommended range
+ *   (driver sets a per-seat price guided by distance, not by how many seats
+ *   they list).
  *
  * @param {object} params
  * @param {"PARCEL"|"PASSENGER"} params.service_type
  * @param {number} params.distance_km
  * @param {string} params.transport_mode
  * @param {number} [params.weight_kg] - available_weight for parcel
- * @param {number} [params.seats] - available_seats for passenger
+ * @param {number} [params.seats] - available_seats for passenger (ignored for range)
  * @returns {{ minimum: number, recommended: number, maximum: number, total_range: object }}
  */
 function getUnitPriceRange(params) {
@@ -316,19 +325,16 @@ function getUnitPriceRange(params) {
   }
 
   if (serviceType === "PASSENGER") {
-    const seats = Number(params.seats) || 1;
-    if (!Number.isInteger(seats) || seats < 1) {
-      throw new Error("seats must be an integer >= 1 to derive unit price range");
-    }
+    // Distance-only estimate; seats do not scale the suggested per-seat price
     const total = calculatePassengerFare({
       distance_km: params.distance_km,
       transport_mode: params.transport_mode,
-      seats,
+      seats: params.seats,
     });
     return {
-      minimum: roundMoney(total.minimum_fare / seats),
-      recommended: roundMoney(total.recommended_fare / seats),
-      maximum: roundMoney(total.maximum_fare / seats),
+      minimum: total.minimum_fare,
+      recommended: total.recommended_fare,
+      maximum: total.maximum_fare,
       total_range: {
         minimum_fare: total.minimum_fare,
         recommended_fare: total.recommended_fare,
@@ -362,7 +368,6 @@ function validateSelectedPrice(params) {
     );
   }
 
-  // Reject NaN / Infinity explicitly (Number.isFinite already covers)
   if (Object.is(selected, NaN)) {
     throw new Error("Selected price is not a valid number");
   }
@@ -391,7 +396,6 @@ function validateSelectedPrice(params) {
     total_range: range.total_range,
   };
 }
-
 
 /**
  * Passenger booking payable breakdown for search results and bookings.
@@ -434,6 +438,47 @@ function computePassengerBookingBreakdown(params = {}) {
   };
 }
 
+/**
+ * Parcel booking payable breakdown — same structure as passenger.
+ *
+ * customer_pay      = price_per_kg * weight_kg
+ * commission_amount = customer_pay * commission_percent / 100
+ * platform_fee      = fixed fee from config
+ * taxes             = (commission_amount + platform_fee) * tax_percent / 100
+ * total_payable     = customer_pay + platform_fee + taxes
+ *
+ * @param {{ price_per_kg: number, weight_kg?: number }} params
+ */
+function computeParcelBookingBreakdown(params = {}) {
+  const weightKg = Math.max(0.1, Number(params.weight_kg) || 0.1);
+  const pricePerKg = Number(params.price_per_kg);
+  if (!Number.isFinite(pricePerKg) || pricePerKg < 0) {
+    throw new Error("price_per_kg must be a non-negative number");
+  }
+
+  const cfg = pricingConfig.parcel;
+  const commissionPercent = Number(cfg.commission_percent ?? 10);
+  const platformFee = Number(cfg.platform_fee ?? 0);
+  const taxPercent = Number(cfg.tax_percent ?? 0);
+
+  const customerPay = roundMoney(pricePerKg * weightKg);
+  const commissionAmount = roundMoney((customerPay * commissionPercent) / 100);
+  const taxes = roundMoney(((commissionAmount + platformFee) * taxPercent) / 100);
+  const totalPayable = roundMoney(customerPay + platformFee + taxes);
+
+  return {
+    weight_kg: roundMoney(weightKg, 2),
+    price_per_kg: roundMoney(pricePerKg, 2),
+    customer_pay: customerPay,
+    commission_percentage: commissionPercent,
+    commission_amount: commissionAmount,
+    platform_fee: roundMoney(platformFee),
+    taxes,
+    total_payable: totalPayable,
+    currency: pricingConfig.currency,
+  };
+}
+
 module.exports = {
   estimateFare,
   calculateParcelFare,
@@ -441,6 +486,7 @@ module.exports = {
   getUnitPriceRange,
   validateSelectedPrice,
   computePassengerBookingBreakdown,
+  computeParcelBookingBreakdown,
   roundMoney,
   ALL_TRANSPORT_MODES,
   pricingConfig, // read-only exposure for tests / diagnostics

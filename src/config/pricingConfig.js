@@ -8,11 +8,15 @@
  * - Adjustment percentages are applied to the recommended (base) fare.
  * - Change values here only; calculation logic lives in pricingService.
  * ---------------------------------------------------------------------------
+ *
+ * Passenger estimate is distance-based only (does NOT depend on number of seats).
+ * For ~250 km CAR trips the recommended total / per-seat guide is ~500 INR,
+ * with allowed range roughly 450–600 INR after adjustment.
  */
 
 module.exports = {
   currency: "INR",
-  pricing_version: "v1",
+  pricing_version: "v2",
 
   /**
    * Rounding: 0 = whole rupees (recommended for INR consumer prices).
@@ -60,6 +64,18 @@ module.exports = {
       max_percent: 25,
     },
 
+    /**
+     * Marketplace fees applied when a customer books a parcel (same model as passenger).
+     * customer_pay  = price_per_kg * weight_kg
+     * platform_fee  = fixed INR per booking
+     * commission    = customer_pay * commission_percent / 100
+     * taxes         = (commission + platform_fee) * tax_percent / 100
+     * total_payable = customer_pay + platform_fee + taxes
+     */
+    commission_percent: 10,
+    platform_fee: 15,
+    tax_percent: 18,
+
     /** Practical bounds for estimation inputs. */
     min_weight_kg: 0.1,
     max_weight_kg: 100,
@@ -69,15 +85,19 @@ module.exports = {
 
   passenger: {
     /**
-     * total = base_fare
-     *       + (distance_km * rate_per_km * mode_multiplier)
-     *       + (seats * rate_per_seat * mode_multiplier)
+     * total (recommended guide for price_per_seat) =
+     *   base_fare + (distance_km * rate_per_km * mode_multiplier)
+     *
+     * Intentionally independent of seat count so listing more seats does not
+     * inflate the suggested per-seat price.
+     *
+     * Tuned so ~250 km CAR ≈ 500 INR recommended, adjustment range ≈ 450–600.
      */
-    base_fare: 60,
+    base_fare: 50,
     rate_per_km: 1.8,
-    rate_per_seat: 40,
+    // rate_per_seat removed — estimate must not depend on number of seats
 
-    minimum_recommended_fare: 120,
+    minimum_recommended_fare: 100,
 
     /**
      * Marketplace fees applied when a passenger books seats.
@@ -100,8 +120,9 @@ module.exports = {
       FLIGHT: 2.5,
     },
 
+    /** ~250 km: recommended 500 → min 450 (-10%), max 600 (+20%). */
     adjustment: {
-      min_percent: -15,
+      min_percent: -10,
       max_percent: 20,
     },
 

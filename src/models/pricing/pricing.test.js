@@ -42,7 +42,7 @@ console.log("Parcel – normal case");
   });
   assert(r.service_type === "PARCEL", "service_type is PARCEL");
   assert(r.currency === "INR", "currency INR");
-  assert(r.pricing_version === "v1", "pricing_version v1");
+  assert(r.pricing_version === "v2", "pricing_version v2");
   const { minimum_fare, recommended_fare, maximum_fare } = r.pricing;
   assert(
     minimum_fare <= recommended_fare && recommended_fare <= maximum_fare,
@@ -120,6 +120,41 @@ console.log("\nPassenger – normal case");
     minimum_fare <= recommended_fare && recommended_fare <= maximum_fare,
     `passenger invariant (${minimum_fare}/${recommended_fare}/${maximum_fare})`
   );
+}
+
+console.log("\nPassenger – estimate independent of seats + ~250km range");
+{
+  const one = pricingService.estimateFare({
+    service_type: "PASSENGER",
+    distance_km: 250,
+    transport_mode: "CAR",
+    seats: 1,
+  });
+  const four = pricingService.estimateFare({
+    service_type: "PASSENGER",
+    distance_km: 250,
+    transport_mode: "CAR",
+    seats: 4,
+  });
+  assert(
+    one.pricing.recommended_fare === four.pricing.recommended_fare,
+    "recommended fare does not change with seats"
+  );
+  assert(
+    one.pricing.minimum_fare === 450 && one.pricing.recommended_fare === 500 && one.pricing.maximum_fare === 600,
+    `250km CAR range is 450–600 (got ${one.pricing.minimum_fare}/${one.pricing.recommended_fare}/${one.pricing.maximum_fare})`
+  );
+}
+
+console.log("\nParcel – booking breakdown matches passenger model");
+{
+  const b = pricingService.computeParcelBookingBreakdown({
+    price_per_kg: 50,
+    weight_kg: 10,
+  });
+  assert(b.customer_pay === 500, "customer_pay = price_per_kg * weight");
+  assert(b.commission_percentage === 10, "commission percent");
+  assert(b.total_payable === b.customer_pay + b.platform_fee + b.taxes, "total_payable formula");
 }
 
 console.log("\nValidation – boundary prices accepted");

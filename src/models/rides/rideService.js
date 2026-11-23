@@ -5,6 +5,7 @@ const rideRepository = require("./rideRepository");
 const routingService = require("./routingService");
 const db = require("../../config/db");
 const bookingRepository = require("../bookings/bookingRepository");
+const { resolveLocationFields, resolveCityFromInput } = require("../../utils/cityResolver");
 
 const {
   uploadToR2,
@@ -64,12 +65,40 @@ const searchRides = async (query) => {
     }
   }
 
-  return rideRepository.searchRides({
+  const rows = await rideRepository.searchRides({
     from: from.trim(),
     to: to.trim(),
     minWeight,
     maxWeight,
     date,
+  });
+
+  // Attach payable breakdown (same model as passenger: customer_pay, commission, total_payable)
+  const weightForBreakdown = maxWeight || minWeight || 1;
+  return (rows || []).map((ride) => {
+    let pricing = null;
+    try {
+      pricing = pricingService.computeParcelBookingBreakdown({
+        price_per_kg: Number(ride.price_per_kg),
+        weight_kg: weightForBreakdown,
+      });
+    } catch (_) {
+      pricing = null;
+    }
+    return {
+      ...ride,
+      pickup_city: ride.pickup_city,
+      drop_city: ride.drop_city,
+      pickup_full_address: ride.pickup_address || ride.pickup_city || null,
+      drop_full_address: ride.drop_address || ride.drop_city || null,
+      customer_pay: pricing?.customer_pay ?? null,
+      commission_percentage: pricing?.commission_percentage ?? null,
+      commission_amount: pricing?.commission_amount ?? null,
+      platform_fee: pricing?.platform_fee ?? null,
+      taxes: pricing?.taxes ?? null,
+      total_payable: pricing?.total_payable ?? null,
+      pricing,
+    };
   });
 };
 
@@ -99,6 +128,8 @@ const searchPassengerRides = async (query) => {
       // Explicit city fields for list UI (never use street-level address here)
       pickup_city: ride.pickup_city,
       drop_city: ride.drop_city,
+      pickup_full_address: ride.pickup_address || ride.pickup_city || null,
+      drop_full_address: ride.drop_address || ride.drop_city || null,
       requested_seats: seats,
       // Payable breakdown for the requested seat count
       customer_pay: pricing?.customer_pay ?? null,
@@ -243,12 +274,15 @@ const shapeRideResponse = (ride) => {
       pickup_state: ride.pickup_state,
       pickup_latitude: ride.pickup_latitude,
       pickup_longitude: ride.pickup_longitude,
+      // full street address (from where user is going); city is matched name only
       pickup_address: ride.pickup_address || null,
+      pickup_full_address: ride.pickup_address || ride.pickup_city || null,
       drop_city: ride.drop_city,
       drop_state: ride.drop_state,
       drop_latitude: ride.drop_latitude,
       drop_longitude: ride.drop_longitude,
       drop_address: ride.drop_address || null,
+      drop_full_address: ride.drop_address || ride.drop_city || null,
       travel_date: ride.travel_date,
       departure_time: ride.departure_time,
       available_weight: ride.available_weight,
@@ -355,9 +389,36 @@ const createRide = async ({ userId, body, files }) => {
     throw new Error("Drop city is required");
   }
 
+  // Resolve free-form addresses (e.g. "b218, ithemtower, sector 62, noida")
+  // → matched city name from cities table + full_address for display
+  const pickupResolved = await resolveLocationFields(
+    pickup_city,
+    pickup_address,
+    pickup_state
+  );
+  const dropResolved = await resolveLocationFields(
+    drop_city,
+    drop_address,
+    drop_state
+  );
+
+  const resolvedPickupCity = pickupResolved.city;
+  const resolvedDropCity = dropResolved.city;
+  const resolvedPickupState = pickupResolved.state;
+  const resolvedDropState = dropResolved.state;
+  const pickupFullAddress = pickupResolved.full_address;
+  const dropFullAddress = dropResolved.full_address;
+
+  if (!resolvedPickupCity) {
+    throw new Error("Pickup city is required");
+  }
+  if (!resolvedDropCity) {
+    throw new Error("Drop city is required");
+  }
+
   if (
-    String(pickup_city).trim().toLowerCase() ===
-    String(drop_city).trim().toLowerCase()
+    String(resolvedPickupCity).trim().toLowerCase() ===
+    String(resolvedDropCity).trim().toLowerCase()
   ) {
     throw new Error("Pickup and drop city cannot be the same");
   }
@@ -510,9 +571,11 @@ const createRide = async ({ userId, body, files }) => {
     if (!Array.isArray(normalizedIntermediateStops) || normalizedIntermediateStops.length > 20) {
       throw new Error("intermediate_stops must be an array with at most 20 stops");
     }
-    normalizedIntermediateStops = normalizedIntermediateStops.map((stop, index) => {
-      const city = String(stop?.city || "").trim();
-      if (!city || city.length > 150) {
+    const resolvedStops = [];
+    for (let index = 0; index < normalizedIntermediateStops.length; index++) {
+      const stop = normalizedIntermediateStops[index];
+      const cityInput = String(stop?.city || "").trim();
+      if (!cityInput || cityInput.length > 150) {
         throw new Error(`Intermediate stop ${index + 1} requires a city (max 150 characters)`);
       }
       const latitude = stop.latitude === null || stop.latitude === undefined || stop.latitude === "" ? null : Number(stop.latitude);
@@ -526,16 +589,22 @@ const createRide = async ({ userId, body, files }) => {
       if (longitude !== null && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
         throw new Error(`Intermediate stop ${index + 1} has invalid longitude`);
       }
-      return {
-        city,
-        state: stop.state ? String(stop.state).trim() : null,
-        address: stop.address ? String(stop.address).trim() : null,
+      const stopResolved = await resolveLocationFields(
+        cityInput,
+        stop.address,
+        stop.state
+      );
+      resolvedStops.push({
+        city: stopResolved.city,
+        state: stopResolved.state,
+        address: stopResolved.full_address,
         latitude,
         longitude,
         planned_arrival_at: stop.planned_arrival_at || null,
         planned_departure_at: stop.planned_departure_at || null,
-      };
-    });
+      });
+    }
+    normalizedIntermediateStops = resolvedStops;
   }
 
   const routeIndex = Number(route_index);
@@ -581,13 +650,7 @@ const createRide = async ({ userId, body, files }) => {
   try {
     await connection.beginTransaction();
 
-    const normalizeAddress = (value, fallbackCity) => {
-      const trimmed = value != null ? String(value).trim() : "";
-      if (trimmed) return trimmed.slice(0, 500);
-      // Always persist a usable address on stops (city is the minimum)
-      return fallbackCity ? String(fallbackCity).trim().slice(0, 500) : null;
-    };
-
+    // City columns store matched city name only; stop.address stores full_address
     const ridePayload = {
       user_id: String(userId).trim(),
       transport_type,
@@ -595,18 +658,16 @@ const createRide = async ({ userId, body, files }) => {
       service_type: normalizedServiceType,
       available_seats: seats,
       price_per_seat: seatPrice,
-      pickup_city: String(pickup_city).trim(),
-      pickup_state: pickup_state
-        ? String(pickup_state).trim()
-        : null,
+      pickup_city: resolvedPickupCity,
+      pickup_state: resolvedPickupState,
       pickup_latitude: pickupLat,
       pickup_longitude: pickupLng,
-      pickup_address: normalizeAddress(pickup_address, pickup_city),
-      drop_city: String(drop_city).trim(),
-      drop_state: drop_state ? String(drop_state).trim() : null,
+      pickup_address: pickupFullAddress,
+      drop_city: resolvedDropCity,
+      drop_state: resolvedDropState,
       drop_latitude: dropLat,
       drop_longitude: dropLng,
-      drop_address: normalizeAddress(drop_address, drop_city),
+      drop_address: dropFullAddress,
       travel_date,
       departure_time,
       available_weight: weight,

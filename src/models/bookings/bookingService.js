@@ -343,7 +343,13 @@ const createBooking = async ({ userId, body }) => {
       throw new Error("Invalid ride price");
     }
 
-    const totalAmount = Number((packageWeight * pricePerKg).toFixed(2));
+    // Same payable model as passenger: customer_pay, commission, platform_fee, taxes, total_payable
+    const pricingService = require("../pricing/pricingService");
+    const breakdown = pricingService.computeParcelBookingBreakdown({
+      price_per_kg: pricePerKg,
+      weight_kg: packageWeight,
+    });
+    const totalAmount = breakdown.total_payable;
 
     // ========================================
     // CREATE BOOKING
@@ -369,7 +375,14 @@ const createBooking = async ({ userId, body }) => {
       drop_address: drop_address ? String(drop_address).trim() : null,
       notes: notes ? String(notes).trim() : null,
       price_per_kg: pricePerKg,
+      // total_amount stores total_payable (customer_pay + platform_fee + taxes)
       total_amount: totalAmount,
+      customer_pay: breakdown.customer_pay,
+      commission_percentage: breakdown.commission_percentage,
+      commission_amount: breakdown.commission_amount,
+      platform_fee: breakdown.platform_fee,
+      taxes: breakdown.taxes,
+      total_payable: breakdown.total_payable,
       payment_method: finalPaymentMethod,
       payment_collection_point: finalPaymentPoint,
       shipment_type: normalizedShipmentType,
@@ -415,7 +428,16 @@ const createBooking = async ({ userId, body }) => {
     }
 
     return {
-      booking,
+      booking: {
+        ...booking,
+        // Payable breakdown (same structure as passenger bookings)
+        customer_pay: breakdown.customer_pay,
+        commission_percentage: breakdown.commission_percentage,
+        commission_amount: breakdown.commission_amount,
+        platform_fee: breakdown.platform_fee,
+        taxes: breakdown.taxes,
+        total_payable: breakdown.total_payable,
+      },
       capacity: {
         ride_capacity_kg: rideCapacity,
         reserved_before_booking_kg: reservedWeight,
@@ -424,6 +446,7 @@ const createBooking = async ({ userId, body }) => {
           (remainingWeight - packageWeight).toFixed(2)
         ),
       },
+      pricing: breakdown,
     };
   } catch (error) {
     await connection.rollback();

@@ -257,44 +257,8 @@ const createRideWithProof = async ({ ride, proof }) => {
  * Caller owns the connection transaction.
  */
 const insertRideOnly = async (connection, ride) => {
-  const rideQuery = `
-    INSERT INTO rides (
-      user_id,
-      transport_type,
-      transport_mode,
-      service_type,
-      available_seats,
-      price_per_seat,
-      pickup_city,
-      pickup_state,
-      pickup_latitude,
-      pickup_longitude,
-      drop_city,
-      drop_state,
-      drop_latitude,
-      drop_longitude,
-      travel_date,
-      departure_time,
-      available_weight,
-      price_per_kg,
-      route_index,
-      route_distance_km,
-      route_duration_minutes,
-      route_polyline,
-      notes
-    )
-    VALUES (
-      ?, ?, ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?, ?, ?,
-      ?, ?,
-      ?, ?,
-      ?, ?, ?, ?,
-      ?
-    )
-  `;
-
-  const rideParams = [
+  // Prefer full_address columns when migration is applied; fall back otherwise.
+  const classicParams = [
     ride.user_id,
     ride.transport_type,
     ride.transport_mode,
@@ -320,12 +284,90 @@ const insertRideOnly = async (connection, ride) => {
     ride.notes,
   ];
 
-  const [rideResult] = await connection.execute(
-    rideQuery,
-    rideParams
-  );
-
-  return rideResult.insertId;
+  try {
+    const [rideResult] = await connection.execute(
+      `
+        INSERT INTO rides (
+          user_id, transport_type, transport_mode, service_type,
+          available_seats, price_per_seat,
+          pickup_city, pickup_state, pickup_latitude, pickup_longitude,
+          pickup_full_address,
+          drop_city, drop_state, drop_latitude, drop_longitude,
+          drop_full_address,
+          travel_date, departure_time,
+          available_weight, price_per_kg,
+          route_index, route_distance_km, route_duration_minutes, route_polyline,
+          notes
+        )
+        VALUES (
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?,
+          ?, ?,
+          ?, ?, ?, ?,
+          ?
+        )
+      `,
+      [
+        ride.user_id,
+        ride.transport_type,
+        ride.transport_mode,
+        ride.service_type || "PARCEL",
+        ride.available_seats || 0,
+        ride.price_per_seat ?? null,
+        ride.pickup_city,
+        ride.pickup_state,
+        ride.pickup_latitude,
+        ride.pickup_longitude,
+        ride.pickup_address || ride.pickup_full_address || null,
+        ride.drop_city,
+        ride.drop_state,
+        ride.drop_latitude,
+        ride.drop_longitude,
+        ride.drop_address || ride.drop_full_address || null,
+        ride.travel_date,
+        ride.departure_time,
+        ride.available_weight,
+        ride.price_per_kg,
+        ride.route_index,
+        ride.route_distance_km,
+        ride.route_duration_minutes,
+        ride.route_polyline,
+        ride.notes,
+      ]
+    );
+    return rideResult.insertId;
+  } catch (err) {
+    if (err && (err.code === "ER_BAD_FIELD_ERROR" || /Unknown column/i.test(String(err.message)))) {
+      const [rideResult] = await connection.execute(
+        `
+          INSERT INTO rides (
+            user_id, transport_type, transport_mode, service_type,
+            available_seats, price_per_seat,
+            pickup_city, pickup_state, pickup_latitude, pickup_longitude,
+            drop_city, drop_state, drop_latitude, drop_longitude,
+            travel_date, departure_time,
+            available_weight, price_per_kg,
+            route_index, route_distance_km, route_duration_minutes, route_polyline,
+            notes
+          )
+          VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?, ?, ?,
+            ?
+          )
+        `,
+        classicParams
+      );
+      return rideResult.insertId;
+    }
+    throw err;
+  }
 };
 
 

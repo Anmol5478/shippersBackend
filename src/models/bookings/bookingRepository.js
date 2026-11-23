@@ -62,77 +62,169 @@ const getReservedWeight = async (connection, rideId) => {
  * Create booking.
  */
 const createBooking = async (connection, booking) => {
-  const [result] = await connection.execute(
-    `
-      INSERT INTO bookings (
-        booking_reference,
-        ride_id,
-        pickup_stop_id,
-        drop_stop_id,
-        sender_id,
-        driver_id,
-        package_weight_kg,
-        package_category,
-        package_description,
-        package_count,
-        sender_name,
-        sender_phone,
-        pickup_address,
-        drop_address,
-        notes,
-        price_per_kg,
-        total_amount,
-        payment_method,
-        payment_collection_point,
-        shipment_type,
-        enterprise_profile_id,
-        business_details_snapshot,
-        purchase_bill_status,
-        payment_status,
-        booking_status,
-        pickup_otp,
-        delivery_otp
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?,
-        'PENDING',
-        'PENDING',
-        ?, ?
-      )
-    `,
-    [
-      booking.booking_reference,
-      booking.ride_id,
-      booking.pickup_stop_id,
-      booking.drop_stop_id,
-      booking.sender_id,
-      booking.driver_id,
-      booking.package_weight_kg,
-      booking.package_category,
-      booking.package_description,
-      booking.package_count,
-      booking.sender_name,
-      booking.sender_phone,
-      booking.pickup_address,
-      booking.drop_address,
-      booking.notes,
-      booking.price_per_kg,
-      booking.total_amount,
-      booking.payment_method,
-      booking.payment_collection_point,
-      booking.shipment_type || "PERSONAL",
-      booking.enterprise_profile_id ?? null,
-      booking.business_details_snapshot ?? null,
-      booking.purchase_bill_status || "NOT_REQUIRED",
-      booking.pickup_otp,
-      booking.delivery_otp,
-    ]
-  );
+  // Prefer extended payable columns (same model as passenger_bookings).
+  // Falls back if migration has not been applied yet.
+  const classicParams = [
+    booking.booking_reference,
+    booking.ride_id,
+    booking.pickup_stop_id,
+    booking.drop_stop_id,
+    booking.sender_id,
+    booking.driver_id,
+    booking.package_weight_kg,
+    booking.package_category,
+    booking.package_description,
+    booking.package_count,
+    booking.sender_name,
+    booking.sender_phone,
+    booking.pickup_address,
+    booking.drop_address,
+    booking.notes,
+    booking.price_per_kg,
+    booking.total_amount,
+    booking.payment_method,
+    booking.payment_collection_point,
+    booking.shipment_type || "PERSONAL",
+    booking.enterprise_profile_id ?? null,
+    booking.business_details_snapshot ?? null,
+    booking.purchase_bill_status || "NOT_REQUIRED",
+    booking.pickup_otp,
+    booking.delivery_otp,
+  ];
 
-  return result.insertId;
+  try {
+    const [result] = await connection.execute(
+      `
+        INSERT INTO bookings (
+          booking_reference,
+          ride_id,
+          pickup_stop_id,
+          drop_stop_id,
+          sender_id,
+          driver_id,
+          package_weight_kg,
+          package_category,
+          package_description,
+          package_count,
+          sender_name,
+          sender_phone,
+          pickup_address,
+          drop_address,
+          notes,
+          price_per_kg,
+          total_amount,
+          customer_pay,
+          commission_percentage,
+          commission_amount,
+          platform_fee,
+          taxes,
+          total_payable,
+          payment_method,
+          payment_collection_point,
+          shipment_type,
+          enterprise_profile_id,
+          business_details_snapshot,
+          purchase_bill_status,
+          payment_status,
+          booking_status,
+          pickup_otp,
+          delivery_otp
+        )
+        VALUES (
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?,
+          'PENDING',
+          'PENDING',
+          ?, ?
+        )
+      `,
+      [
+        booking.booking_reference,
+        booking.ride_id,
+        booking.pickup_stop_id,
+        booking.drop_stop_id,
+        booking.sender_id,
+        booking.driver_id,
+        booking.package_weight_kg,
+        booking.package_category,
+        booking.package_description,
+        booking.package_count,
+        booking.sender_name,
+        booking.sender_phone,
+        booking.pickup_address,
+        booking.drop_address,
+        booking.notes,
+        booking.price_per_kg,
+        booking.total_amount,
+        booking.customer_pay ?? booking.total_amount,
+        booking.commission_percentage ?? null,
+        booking.commission_amount ?? null,
+        booking.platform_fee ?? null,
+        booking.taxes ?? null,
+        booking.total_payable ?? booking.total_amount,
+        booking.payment_method,
+        booking.payment_collection_point,
+        booking.shipment_type || "PERSONAL",
+        booking.enterprise_profile_id ?? null,
+        booking.business_details_snapshot ?? null,
+        booking.purchase_bill_status || "NOT_REQUIRED",
+        booking.pickup_otp,
+        booking.delivery_otp,
+      ]
+    );
+    return result.insertId;
+  } catch (err) {
+    if (err && (err.code === "ER_BAD_FIELD_ERROR" || /Unknown column/i.test(String(err.message)))) {
+      const [result] = await connection.execute(
+        `
+          INSERT INTO bookings (
+            booking_reference,
+            ride_id,
+            pickup_stop_id,
+            drop_stop_id,
+            sender_id,
+            driver_id,
+            package_weight_kg,
+            package_category,
+            package_description,
+            package_count,
+            sender_name,
+            sender_phone,
+            pickup_address,
+            drop_address,
+            notes,
+            price_per_kg,
+            total_amount,
+            payment_method,
+            payment_collection_point,
+            shipment_type,
+            enterprise_profile_id,
+            business_details_snapshot,
+            purchase_bill_status,
+            payment_status,
+            booking_status,
+            pickup_otp,
+            delivery_otp
+          )
+          VALUES (
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?, ?,
+            'PENDING',
+            'PENDING',
+            ?, ?
+          )
+        `,
+        classicParams
+      );
+      return result.insertId;
+    }
+    throw err;
+  }
 };
 
 /**
