@@ -76,6 +76,9 @@ module.exports = {
     platform_fee: 15,
     tax_percent: 18,
 
+    /** % of total_payable required as advance to confirm booking */
+    advance_percent: 20,
+
     /** Practical bounds for estimation inputs. */
     min_weight_kg: 0.1,
     max_weight_kg: 100,
@@ -110,6 +113,9 @@ module.exports = {
     commission_percent: 10,
     platform_fee: 15,
     tax_percent: 18,
+
+    /** % of total_payable required as advance to confirm booking */
+    advance_percent: 20,
 
     mode_multipliers: {
       CAR: 1.0,

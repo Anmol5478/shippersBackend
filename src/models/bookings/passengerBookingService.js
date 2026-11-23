@@ -80,6 +80,8 @@ const createPassengerBooking = async ({ userId, body }) => {
       platform_fee: breakdown.platform_fee,
       taxes: breakdown.taxes,
       total_payable: breakdown.total_payable,
+      advance_percent: breakdown.advance_percent ?? 20,
+      advance_amount: breakdown.advance_amount ?? null,
       payment_method: paymentMethod, notes,
     });
     await repository.reserve(connection, bookingId, segments, seatCount);
@@ -153,6 +155,18 @@ const updatePassengerBookingStatus = async ({ bookingId, userId, status }) => {
     if (!booking) throw new Error("Passenger booking not found");
     if (String(booking.ride_owner_id) !== String(userId)) throw new Error("Only the ride owner can update this booking");
     if (booking.booking_status !== "PENDING") throw new Error("Only pending passenger bookings can be updated");
+    // Confirm requires 20% advance to be paid first
+    if (normalized === "CONFIRMED") {
+      const [payRows] = await connection.execute(
+        `SELECT payment_status, advance_amount, total_payable FROM passenger_bookings WHERE id = ?`,
+        [id]
+      );
+      const pay = payRows[0];
+      const ps = String(pay?.payment_status || "PENDING").toUpperCase();
+      if (ps !== "ADVANCE_PAID" && ps !== "PAID" && ps !== "FULL") {
+        throw new Error("Passenger must pay the 20% advance before this booking can be confirmed. Current payment status: " + ps);
+      }
+    }
     if (normalized === "REJECTED") await repository.release(connection, id);
     const [updated] = await connection.execute(
       `UPDATE passenger_bookings SET booking_status = ? WHERE id = ? AND booking_status = 'PENDING'`,
@@ -169,7 +183,115 @@ const updatePassengerBookingStatus = async ({ bookingId, userId, status }) => {
   return repository.getById(id);
 };
 
+
+/**
+ * Passenger pays mandatory advance (default 20% of total_payable).
+ * Until this is paid, booking stays PENDING and driver cannot confirm.
+ * Supports WALLET debit when payment_method is WALLET/ONLINE; otherwise marks advance paid (UPI/CASH offline collection).
+ */
+const payPassengerBookingAdvance = async ({ bookingId, userId, body = {} }) => {
+  const id = Number(bookingId);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid passenger booking ID");
+  const paymentMethod = String(body.payment_method || "WALLET").toUpperCase();
+  if (!["WALLET", "UPI", "ONLINE", "CASH"].includes(paymentMethod)) {
+    throw new Error("Invalid payment method for advance");
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT id, passenger_id, booking_status, payment_status, total_payable, total_fare, advance_amount, advance_percent
+       FROM passenger_bookings WHERE id = ? FOR UPDATE`,
+      [id]
+    );
+    const booking = rows[0];
+    if (!booking) throw new Error("Passenger booking not found");
+    if (String(booking.passenger_id) !== String(userId)) {
+      throw new Error("You are not allowed to pay for this booking");
+    }
+    if (booking.booking_status !== "PENDING") {
+      throw new Error("Advance can only be paid while the booking is pending");
+    }
+    const ps = String(booking.payment_status || "PENDING").toUpperCase();
+    if (ps === "ADVANCE_PAID" || ps === "PAID" || ps === "FULL") {
+      throw new Error("Advance has already been paid for this booking");
+    }
+
+    const total = Number(booking.total_payable ?? booking.total_fare ?? 0);
+    let advanceAmount = Number(booking.advance_amount);
+    if (!Number.isFinite(advanceAmount) || advanceAmount <= 0) {
+      const pct = Number(booking.advance_percent ?? 20);
+      advanceAmount = Math.round((total * pct) / 100);
+    }
+    if (!Number.isFinite(advanceAmount) || advanceAmount <= 0) {
+      throw new Error("Invalid advance amount");
+    }
+
+    // Wallet debit path
+    if (paymentMethod === "WALLET" || paymentMethod === "ONLINE") {
+      const [wallets] = await connection.execute(
+        `SELECT id, balance FROM wallets WHERE user_id = ? FOR UPDATE`,
+        [String(userId)]
+      );
+      let wallet = wallets[0];
+      if (!wallet) {
+        const [ins] = await connection.execute(
+          `INSERT INTO wallets (user_id, balance) VALUES (?, 0)`,
+          [String(userId)]
+        );
+        wallet = { id: ins.insertId, balance: 0 };
+      }
+      const balance = Number(wallet.balance);
+      if (balance < advanceAmount) {
+        throw new Error(`Insufficient wallet balance. Advance due: ₹${advanceAmount}, available: ₹${balance}`);
+      }
+      const newBalance = Math.round((balance - advanceAmount) * 100) / 100;
+      await connection.execute(`UPDATE wallets SET balance = ? WHERE id = ?`, [newBalance, wallet.id]);
+      try {
+        await connection.execute(
+          `INSERT INTO wallet_transactions
+            (user_id, type, amount, balance_after, reference_id, description, status)
+           VALUES (?, 'DEBIT', ?, ?, ?, ?, 'COMPLETED')`,
+          [
+            String(userId),
+            advanceAmount,
+            newBalance,
+            `PB-${id}`,
+            `Advance payment (20%) for passenger booking #${id}`,
+          ]
+        );
+      } catch (txErr) {
+        // wallet_transactions schema may differ; continue if debit succeeded
+        if (!/Unknown column|ER_BAD_FIELD/i.test(String(txErr.message))) throw txErr;
+      }
+    }
+
+    const ok = await repository.markAdvancePaid(connection, id, paymentMethod);
+    if (!ok) throw new Error("Could not update payment status; please try again");
+
+    // Ensure advance_amount is persisted if column was null
+    await connection.execute(
+      `UPDATE passenger_bookings SET advance_amount = COALESCE(advance_amount, ?), advance_percent = COALESCE(advance_percent, 20) WHERE id = ?`,
+      [advanceAmount, id]
+    );
+
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  const updated = await repository.getById(id);
+  return {
+    ...updated,
+    message: "Advance paid successfully. Booking remains pending until the driver confirms.",
+  };
+};
+
 module.exports = {
   createPassengerBooking, getPassengerBookings, getDriverPassengerBookings,
-  cancelPassengerBooking, updatePassengerBookingStatus,
+  cancelPassengerBooking, updatePassengerBookingStatus, payPassengerBookingAdvance,
 };

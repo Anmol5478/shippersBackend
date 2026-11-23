@@ -138,6 +138,8 @@ const searchPassengerRides = async (query) => {
       platform_fee: pricing?.platform_fee ?? null,
       taxes: pricing?.taxes ?? null,
       total_payable: pricing?.total_payable ?? null,
+      advance_percent: pricing?.advance_percent ?? 20,
+      advance_amount: pricing?.advance_amount ?? null,
       pricing,
     };
   });

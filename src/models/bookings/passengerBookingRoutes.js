@@ -106,4 +106,29 @@ router.patch("/:bookingId/cancel", authenticate, controller.cancel);
  */
 router.patch("/:bookingId/status", authenticate, controller.updateStatus);
 
+/**
+ * @swagger
+ * /api/passenger-bookings/{bookingId}/pay-advance:
+ *   post:
+ *     summary: Pay mandatory 20% advance to allow booking confirmation
+ *     tags: [Passenger Bookings]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: bookingId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               payment_method: { type: string, enum: [WALLET, UPI, ONLINE, CASH], default: WALLET }
+ *     responses:
+ *       200: { description: Advance paid; booking still PENDING until driver confirms }
+ *       409: { description: Already paid or insufficient wallet balance }
+ */
+router.post("/:bookingId/pay-advance", authenticate, controller.payAdvance);
+
 module.exports = router;

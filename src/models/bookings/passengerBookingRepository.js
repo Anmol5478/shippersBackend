@@ -44,8 +44,9 @@ const create = async (connection, data) => {
         (booking_reference, ride_id, passenger_id, driver_id, pickup_stop_id, drop_stop_id,
          seat_count, passenger_name, passenger_phone, fare_per_seat, total_fare,
          customer_pay, commission_percentage, commission_amount, platform_fee, taxes, total_payable,
+         advance_percent, advance_amount,
          payment_method, payment_status, booking_status, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 'PENDING', ?)`,
       [
         data.booking_reference, data.ride_id, data.passenger_id, data.driver_id,
         data.pickup_stop_id, data.drop_stop_id, data.seat_count, data.passenger_name,
@@ -53,6 +54,7 @@ const create = async (connection, data) => {
         data.customer_pay ?? data.total_fare, data.commission_percentage ?? null,
         data.commission_amount ?? null, data.platform_fee ?? null,
         data.taxes ?? null, data.total_payable ?? data.total_fare,
+        data.advance_percent ?? 20, data.advance_amount ?? null,
         data.payment_method, data.notes,
       ]
     );
@@ -159,7 +161,21 @@ const listByDriver = async (userId) => {
   return rows;
 };
 
+const markAdvancePaid = async (connection, bookingId, paymentMethod) => {
+  const [result] = await connection.execute(
+    `UPDATE passenger_bookings
+     SET payment_status = 'ADVANCE_PAID',
+         payment_method = COALESCE(?, payment_method),
+         advance_paid_at = NOW()
+     WHERE id = ? AND payment_status = 'PENDING' AND booking_status = 'PENDING'`,
+    [paymentMethod || null, bookingId]
+  );
+  return result.affectedRows > 0;
+};
+
 module.exports = {
   getRideForUpdate, getStops, getSegments, create, reserve, release,
   getById, listByPassenger, listByDriver,
+  markAdvancePaid,
+
 };

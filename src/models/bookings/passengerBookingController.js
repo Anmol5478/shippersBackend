@@ -52,3 +52,26 @@ exports.updateStatus = async (req, res) => {
     return res.status(status).json({ responseCode: "01", success: false, message });
   }
 };
+
+exports.payAdvance = async (req, res) => {
+  try {
+    const data = await service.payPassengerBookingAdvance({
+      bookingId: req.params.bookingId,
+      userId: req.user?.user_id,
+      body: req.body || {},
+    });
+    return res.json({
+      responseCode: "00",
+      success: true,
+      message: "Advance paid successfully. Awaiting driver confirmation.",
+      data,
+    });
+  } catch (error) {
+    const message = error.message || "Unable to pay advance";
+    let status = 400;
+    if (/not found/i.test(message)) status = 404;
+    else if (/not allowed/i.test(message)) status = 403;
+    else if (/already been paid|Insufficient wallet/i.test(message)) status = 409;
+    return res.status(status).json({ responseCode: "01", success: false, message });
+  }
+};

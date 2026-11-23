@@ -425,6 +425,9 @@ function computePassengerBookingBreakdown(params = {}) {
   const taxes = roundMoney(((commissionAmount + platformFee) * taxPercent) / 100);
   const totalPayable = roundMoney(customerPay + platformFee + taxes);
 
+  const advancePercent = Number(cfg.advance_percent ?? 20);
+  const advanceAmount = roundMoney((totalPayable * advancePercent) / 100);
+
   return {
     seats,
     price_per_seat: roundMoney(pricePerSeat),
@@ -434,6 +437,8 @@ function computePassengerBookingBreakdown(params = {}) {
     platform_fee: roundMoney(platformFee),
     taxes,
     total_payable: totalPayable,
+    advance_percent: advancePercent,
+    advance_amount: advanceAmount,
     currency: pricingConfig.currency,
   };
 }
