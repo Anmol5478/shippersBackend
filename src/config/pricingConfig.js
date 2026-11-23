@@ -50,7 +50,7 @@ module.exports = {
      * Keys must match ALLOWED_PUBLIC_MODES + ALLOWED_PRIVATE_MODES.
      */
     mode_multipliers: {
-      CAR: 1.2,
+      CAR: 1.0,
       BIKE: 0.85,
       OTHER: 1.0,
       TRAIN: 0.7,
@@ -93,7 +93,7 @@ module.exports = {
      *
      * Tuned so ~250 km CAR ≈ 500 INR recommended, adjustment range ≈ 450–600.
      */
-    base_fare: 80,
+    base_fare: 50,
     rate_per_km: 1.8,
     // rate_per_seat removed — estimate must not depend on number of seats
 
@@ -112,7 +112,7 @@ module.exports = {
     tax_percent: 18,
 
     mode_multipliers: {
-      CAR: 1.2,
+      CAR: 1.0,
       BIKE: 0.9,
       OTHER: 1.0,
       TRAIN: 0.65,

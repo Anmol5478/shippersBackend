@@ -116,7 +116,7 @@ const searchPassengerRides = async (query) => {
   return (rows || []).map((ride) => {
     let pricing = null;
     try {
-      pricing = computePassengerBookingBreakdown({
+      pricing = pricingService.computePassengerBookingBreakdown({
         price_per_seat: Number(ride.price_per_seat),
         seats,
       });
