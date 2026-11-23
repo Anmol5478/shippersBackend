@@ -1,12 +1,28 @@
 const express = require("express");
+const http = require("http");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const { Server } = require("socket.io");
 const db = require("./config/db");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
+const { registerChatSockets } = require("./models/chat/chatSocket");
 
 dotenv.config();
 const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+  path: "/socket.io",
+});
+
+// Make io available to controllers
+app.set("io", io);
+
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
@@ -23,6 +39,7 @@ const walletRoutes = require("./models/wallet/walletRoutes");
 const adminRoutes = require("./models/admin/adminRoutes");
 const notificationRoutes = require("./models/notifications/notificationRoutes");
 const pricingRoutes = require("./models/pricing/pricingRoutes");
+const chatRoutes = require("./models/chat/chatRoutes");
 const processPendingReceipts = require("./models/notifications/pushReceiptService");
 
 app.post("/health/database", async (_req, res) => {
@@ -47,11 +64,16 @@ app.use("/api/wallet", walletRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/pricing", pricingRoutes);
+app.use("/api/chat", chatRoutes);
 app.use("/swagger", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get("/health/ping-server-9x7k", (_req, res) =>
   res.status(200).json({ success: true })
 );
 app.post("/health/ping-server-9x7k", (_req, res) => res.status(200).json({ success: true }));
+
+// Register WebSocket chat + call signaling
+registerChatSockets(io);
+
 // Expo push receipt checker
 let isProcessingReceipts = false;
 
@@ -82,5 +104,6 @@ const receiptStartupTimeout = setTimeout(
 );
 
 receiptStartupTimeout.unref();
+
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT} (HTTP + WebSocket)`));
